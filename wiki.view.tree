@@ -1,0 +1,6 @@
+$my_wiki $mol_page
+	title \My Wiki
+	body /
+		<= Text $mol_textarea
+			hint \What do you think?
+			value?val <=> text?val \
