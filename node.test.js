@@ -3423,6 +3423,1439 @@ var $;
 "use strict";
 var $;
 (function ($) {
+    class $mol_store extends $.$mol_object2 {
+        constructor(data_default) {
+            super();
+            this.data_default = data_default;
+        }
+        data(next) {
+            return next === undefined ? this.data_default : next;
+        }
+        snapshot(next) {
+            return JSON.stringify(this.data(next === undefined ? next : JSON.parse(next)));
+        }
+        value(key, next) {
+            const data = this.data();
+            if (next === undefined)
+                return data && data[key];
+            const Constr = Reflect.getPrototypeOf(data).constructor;
+            this.data(Object.assign(new Constr, data, { [key]: next }));
+            return next;
+        }
+        sub(key, lens) {
+            if (!lens)
+                lens = new $mol_store();
+            const data = lens.data;
+            lens.data = next => {
+                var _a;
+                if (next == undefined) {
+                    return (_a = this.value(key)) !== null && _a !== void 0 ? _a : lens.data_default;
+                }
+                return this.value(key, next);
+            };
+            return lens;
+        }
+        reset() {
+            this.data(this.data_default);
+        }
+        active() {
+            return true;
+        }
+    }
+    __decorate([
+        $.$mol_mem
+    ], $mol_store.prototype, "data", null);
+    $.$mol_store = $mol_store;
+})($ || ($ = {}));
+//store.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    function $hyoo_crowd_delta(values, stamps) {
+        return { values, stamps };
+    }
+    $.$hyoo_crowd_delta = $hyoo_crowd_delta;
+})($ || ($ = {}));
+//delta.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    const concurrency = 1000000;
+    class $hyoo_crowd_clock {
+        constructor(peer) {
+            this.version_max = 0;
+            this.saw_versions = new Map();
+            this.peer = peer
+                ? peer % concurrency
+                : Math.floor(concurrency * Math.random());
+        }
+        version_from(stamp) {
+            return Math.abs(stamp);
+        }
+        index_from(stamp) {
+            return Math.floor(Math.abs(stamp) / concurrency);
+        }
+        peer_from(stamp) {
+            return Math.abs(stamp) % concurrency;
+        }
+        make(index, peer = this.peer) {
+            return index * concurrency + peer;
+        }
+        feed(stamp) {
+            var _a;
+            const version = this.version_from(stamp);
+            if (this.version_max < version) {
+                this.version_max = version;
+            }
+            const peer = this.peer_from(stamp);
+            if (((_a = this.saw_versions.get(peer)) !== null && _a !== void 0 ? _a : 0) < version) {
+                this.saw_versions.set(peer, version);
+            }
+            return version;
+        }
+        is_new(stamp) {
+            var _a;
+            const version = this.version_from(stamp);
+            return version > ((_a = this.saw_versions.get(this.peer_from(stamp))) !== null && _a !== void 0 ? _a : 0);
+        }
+        is_ahead(clock) {
+            for (const version of this.saw_versions.values()) {
+                if (clock.is_new(version))
+                    return true;
+            }
+            return false;
+        }
+        generate() {
+            return this.feed((Math.floor(this.version_max / concurrency) + 1) * concurrency + this.peer);
+        }
+        fork(peer) {
+            const clock = new $hyoo_crowd_clock(peer);
+            for (const version of this.saw_versions.values()) {
+                clock.feed(version);
+            }
+            return clock;
+        }
+    }
+    $.$hyoo_crowd_clock = $hyoo_crowd_clock;
+})($ || ($ = {}));
+//clock.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_store {
+        constructor(clock = new $.$hyoo_crowd_clock) {
+            this.clock = clock;
+        }
+        static make() {
+            return new this();
+        }
+        delta(clock = new $.$hyoo_crowd_clock) {
+            return $.$hyoo_crowd_delta([], []);
+        }
+        toJSON() {
+            return this.delta();
+        }
+        apply(delta) {
+            return this;
+        }
+        fork(peer) {
+            const Fork = this.constructor;
+            const fork = new Fork(this.clock.fork(peer));
+            fork.apply(this.delta());
+            return fork;
+        }
+    }
+    $.$hyoo_crowd_store = $hyoo_crowd_store;
+})($ || ($ = {}));
+//store.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_dict extends $.$hyoo_crowd_store {
+        constructor() {
+            super(...arguments);
+            this.stores = new Map();
+        }
+        static of(Types) {
+            return class Tuple extends this {
+                constructor() {
+                    super(...arguments);
+                    this.Fields = Types;
+                }
+            };
+        }
+        has(key) {
+            return this.stores.has(key);
+        }
+        for(key) {
+            let store = this.stores.get(key);
+            if (store)
+                return store;
+            const Type = this.Fields[String(key !== null && key !== void 0 ? key : '')] || Object.values(this.Fields)[0];
+            store = new Type(this.clock);
+            this.stores.set(key, store);
+            return store;
+        }
+        delta(clock = new $.$hyoo_crowd_clock) {
+            const delta = $.$hyoo_crowd_delta([], []);
+            for (let [key, value] of this.stores) {
+                const patch = value.delta(clock);
+                if (patch.values.length === 0)
+                    continue;
+                delta.values.push(key);
+                for (const val of patch.values)
+                    delta.values.push(val);
+                delta.stamps.push(-patch.values.length);
+                for (const stamp of patch.stamps)
+                    delta.stamps.push(stamp);
+            }
+            return delta;
+        }
+        apply(delta) {
+            let key;
+            let count = 0;
+            let patch = $.$hyoo_crowd_delta([], []);
+            const dump = () => {
+                if (patch.values.length === 0)
+                    return;
+                this.for(key).apply(patch);
+                patch = $.$hyoo_crowd_delta([], []);
+            };
+            for (let i = 0; i < delta.values.length; ++i) {
+                const val = delta.values[i];
+                const stamp = delta.stamps[i];
+                if (count === 0) {
+                    dump();
+                    key = val;
+                    count = -stamp;
+                    continue;
+                }
+                else {
+                    patch.values.push(val);
+                    patch.stamps.push(stamp);
+                    --count;
+                }
+            }
+            dump();
+            return this;
+        }
+    }
+    $.$hyoo_crowd_dict = $hyoo_crowd_dict;
+})($ || ($ = {}));
+//dict.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_reg extends $.$hyoo_crowd_store {
+        constructor() {
+            super(...arguments);
+            this._value = null;
+            this._stamp = 0;
+            this._mult = 1;
+        }
+        get version() {
+            return this.clock.version_from(this._stamp);
+        }
+        str(next) {
+            var _a;
+            return String((_a = this.value(next)) !== null && _a !== void 0 ? _a : '');
+        }
+        numb(next) {
+            var _a;
+            return Number((_a = this.value(next)) !== null && _a !== void 0 ? _a : 0);
+        }
+        bool(next) {
+            var _a;
+            return Boolean((_a = this.value(next)) !== null && _a !== void 0 ? _a : false);
+        }
+        delta(clock = new $.$hyoo_crowd_clock) {
+            if (!clock.is_new(this._stamp))
+                return $.$hyoo_crowd_delta([], []);
+            return $.$hyoo_crowd_delta([this._value], [this._stamp]);
+        }
+        value(next) {
+            if (next === undefined)
+                return this._value;
+            if (this._value === next)
+                return this._value;
+            this._value = next;
+            this.clock.feed(this._stamp = this._mult * this.clock.generate());
+            return next;
+        }
+        apply(delta) {
+            for (let i = 0; i < delta.values.length; ++i) {
+                const val = delta.values[i];
+                const stamp = delta.stamps[i];
+                this.clock.feed(stamp);
+                if (this._mult * stamp <= this._mult * this._stamp)
+                    continue;
+                this._value = val;
+                this._stamp = stamp;
+            }
+            return this;
+        }
+    }
+    $.$hyoo_crowd_reg = $hyoo_crowd_reg;
+    class $hyoo_crowd_reg_back extends $hyoo_crowd_reg {
+        constructor() {
+            super(...arguments);
+            this._mult = -1;
+        }
+    }
+    $.$hyoo_crowd_reg_back = $hyoo_crowd_reg_back;
+})($ || ($ = {}));
+//reg.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_union extends $.$hyoo_crowd_store {
+        constructor() {
+            super(...arguments);
+            this.type_store = new $.$hyoo_crowd_reg_back(this.clock);
+        }
+        static of(Types) {
+            return class Union extends this {
+                constructor() {
+                    super(...arguments);
+                    this.Types = Types;
+                }
+            };
+        }
+        get type() {
+            const type = this.type_store.value();
+            return type;
+        }
+        as(type) {
+            if (this.type !== type)
+                return null;
+            if (this.value_store)
+                return this.value_store;
+            return this.to(type);
+        }
+        to(type, stamp) {
+            if (this.type === type)
+                return this.as(type);
+            this.type_store.apply($.$hyoo_crowd_delta([type], [stamp || -this.clock.generate()]));
+            if (this.type !== type)
+                return this.as(this.type);
+            const store = new this.Types[type](this.clock);
+            if (this.value_store)
+                store.apply(this.value_store.delta());
+            return this.value_store = store;
+        }
+        delta(clock = new $.$hyoo_crowd_clock) {
+            var _a, _b, _c;
+            const val = (_a = this.value_store) === null || _a === void 0 ? void 0 : _a.delta(clock);
+            if ((val === null || val === void 0 ? void 0 : val.values.length) === 0)
+                return $.$hyoo_crowd_delta([], []);
+            const type = this.type_store.delta();
+            return $.$hyoo_crowd_delta([
+                ...type.values,
+                ...(_b = val === null || val === void 0 ? void 0 : val.values) !== null && _b !== void 0 ? _b : [],
+            ], [
+                ...type.stamps,
+                ...(_c = val === null || val === void 0 ? void 0 : val.stamps) !== null && _c !== void 0 ? _c : [],
+            ]);
+        }
+        apply(delta) {
+            if (delta.values.length === 0)
+                return this;
+            let type = delta.values[0];
+            if (!this.Types[type]) {
+                type = Object.keys(this.Types)[0];
+                this.to(type).apply(delta);
+                return this;
+            }
+            const store = this.to(type, delta.stamps[0]);
+            store.apply($.$hyoo_crowd_delta(delta.values.slice(1), delta.stamps.slice(1)));
+            return this;
+        }
+    }
+    $.$hyoo_crowd_union = $hyoo_crowd_union;
+})($ || ($ = {}));
+//union.js.map
+;
+"use strict";
+//intersect.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_regexp extends RegExp {
+        constructor(source, flags = '', groups = []) {
+            super(source, flags);
+            this.groups = groups;
+        }
+        get parse() {
+            const self = this;
+            return function* parsing(str, from = 0) {
+                while (from < str.length) {
+                    self.lastIndex = from;
+                    const res = self.exec(str);
+                    if (res === null) {
+                        yield { 0: str.substring(from) };
+                        return null;
+                    }
+                    if (from === self.lastIndex) {
+                        $.$mol_fail(new Error('Captured empty substring'));
+                    }
+                    const found = {};
+                    const skipped = str.slice(from, self.lastIndex - res[0].length);
+                    if (skipped)
+                        yield { 0: skipped };
+                    from = self.lastIndex;
+                    for (let i = 0; i < self.groups.length; ++i) {
+                        const group = self.groups[i];
+                        found[group] = found[group] || res[i + 1] || '';
+                    }
+                    yield found;
+                }
+            };
+        }
+        static repeat(source, min = 0, max = Number.POSITIVE_INFINITY) {
+            const regexp = $mol_regexp.from(source);
+            const upper = Number.isFinite(max) ? max : '';
+            return new $mol_regexp(`(?:${regexp.source}){${min},${upper}}?`, regexp.flags, regexp.groups);
+        }
+        static repeat_greedy(source, min = 0, max = Number.POSITIVE_INFINITY) {
+            const regexp = $mol_regexp.from(source);
+            const upper = Number.isFinite(max) ? max : '';
+            return new $mol_regexp(`(?:${regexp.source}){${min},${upper}}`, regexp.flags, regexp.groups);
+        }
+        static optional(source) {
+            return $mol_regexp.repeat_greedy(source, 0, 1);
+        }
+        static force_after(source) {
+            const regexp = $mol_regexp.from(source);
+            return new $mol_regexp(`(?=${regexp.source})`, regexp.flags, regexp.groups);
+        }
+        static forbid_after(source) {
+            const regexp = $mol_regexp.from(source);
+            return new $mol_regexp(`(?!${regexp.source})`, regexp.flags, regexp.groups);
+        }
+        static from(source, { ignoreCase, multiline } = {
+            ignoreCase: false,
+            multiline: false,
+        }) {
+            let flags = 'gu';
+            if (multiline)
+                flags += 'm';
+            if (ignoreCase)
+                flags += 'i';
+            if (typeof source === 'string') {
+                return new $mol_regexp(source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+            }
+            else if (source instanceof RegExp) {
+                if (source instanceof $mol_regexp)
+                    return source;
+                const test = new $mol_regexp('|' + source.source);
+                const groups = Array.from({ length: test.exec('').length - 1 }, (_, i) => String(i + 1));
+                return new $mol_regexp(source.source, source.flags, groups);
+            }
+            if (Array.isArray(source)) {
+                const sources = [];
+                const groups = [];
+                let index = 0;
+                for (const item of source) {
+                    const regexp = $mol_regexp.from(item);
+                    sources.push(regexp.source);
+                    for (let group of regexp.groups) {
+                        if (Number(group) >= 0) {
+                            groups.push(String(index++));
+                        }
+                        else {
+                            groups.push(group);
+                        }
+                    }
+                }
+                return new $mol_regexp(sources.join(''), flags, groups);
+            }
+            else {
+                const groups = [];
+                const chunks = Object.keys(source).map(name => {
+                    groups.push(name);
+                    const regexp = $mol_regexp.from(source[name]);
+                    groups.push(...regexp.groups);
+                    return `(${regexp.source})`;
+                });
+                return new $mol_regexp(`(?:${chunks.join('|')})`, flags, groups);
+            }
+        }
+        static char_code(code) {
+            return new $mol_regexp(`\\u${code.toString(16).padStart(4, '0')}`);
+        }
+        static char_range(from, to) {
+            return new $mol_regexp(`${$mol_regexp.char_code(from)}..${$mol_regexp.char_code(to)}`);
+        }
+        static char_only(...allowed) {
+            const regexp = allowed.map(f => $mol_regexp.from(f).source).join('');
+            return new $mol_regexp(`[${regexp}]`);
+        }
+        static char_except(...forbidden) {
+            const regexp = forbidden.map(f => $mol_regexp.from(f).source).join('');
+            return new $mol_regexp(`[^${regexp}]`);
+        }
+    }
+    $mol_regexp.char_any = $mol_regexp.from(/[\s\S]/);
+    $mol_regexp.digit = $mol_regexp.from(/\d/);
+    $mol_regexp.letter = $mol_regexp.from(/\w/);
+    $mol_regexp.space = $mol_regexp.from(/\s/);
+    $mol_regexp.tab = $mol_regexp.from(/\t/);
+    $mol_regexp.slash_back = $mol_regexp.from(/\\/);
+    $mol_regexp.word_break = $mol_regexp.from(/\b/);
+    $mol_regexp.line_end = $mol_regexp.from(/\r?\n/);
+    $mol_regexp.begin = $mol_regexp.from(/^/);
+    $mol_regexp.end = $mol_regexp.from(/$/);
+    $mol_regexp.or = $mol_regexp.from(/|/);
+    $.$mol_regexp = $mol_regexp;
+})($ || ($ = {}));
+//regexp.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_list extends $.$hyoo_crowd_store {
+        constructor() {
+            super(...arguments);
+            this.clock_self = new $.$hyoo_crowd_clock;
+            this.array = [];
+            this.stamps = new Map();
+        }
+        get count() {
+            return this.array.length;
+        }
+        items(next) {
+            const prev = this.array;
+            if (!next)
+                return prev.slice();
+            for (let i = 0; i < next.length; ++i) {
+                let n = next[i];
+                let p = prev[i];
+                if (n === p)
+                    continue;
+                if (next.length > prev.length) {
+                    this.insert(n, i);
+                }
+                else {
+                    this.cut(p);
+                    i--;
+                }
+            }
+            return prev.slice();
+        }
+        get items_internal() {
+            return this.array;
+        }
+        has(val) {
+            return this.stamps.get(val) > 0;
+        }
+        version_item(val) {
+            var _a;
+            return this.clock.version_from((_a = this.stamps.get(val)) !== null && _a !== void 0 ? _a : 0);
+        }
+        version_feed(version) {
+            this.clock.feed(version);
+            this.clock_self.feed(version);
+        }
+        delta(clock = new $.$hyoo_crowd_clock) {
+            const delta = $.$hyoo_crowd_delta([], []);
+            if (!this.clock_self.is_ahead(clock))
+                return delta;
+            for (const key of this.array) {
+                delta.values.push(key);
+                delta.stamps.push(this.stamps.get(key));
+            }
+            for (const [key, stamp] of this.stamps) {
+                if (stamp > 0)
+                    continue;
+                delta.values.push(key);
+                delta.stamps.push(stamp);
+            }
+            return delta;
+        }
+        insert(key, pos = this.array.length) {
+            const exists = this.array[pos];
+            if (exists === key)
+                return this;
+            const delta = $.$hyoo_crowd_delta([], []);
+            if (pos > 0) {
+                const anchor = this.array[pos - 1];
+                delta.values.push(anchor);
+                delta.stamps.push(this.stamps.get(anchor));
+            }
+            delta.values.push(key);
+            delta.stamps.push(this.clock.generate());
+            this.apply(delta);
+            return this;
+        }
+        cut(key) {
+            var _a;
+            const stamp = (_a = this.stamps.get(key)) !== null && _a !== void 0 ? _a : 0;
+            if (stamp <= 0)
+                return this;
+            this.apply($.$hyoo_crowd_delta([key], [-this.clock.generate()]));
+            return this;
+        }
+        apply(delta) {
+            var _a;
+            const patch_array = [];
+            const patch_stamps = new Map();
+            for (let i = 0; i < delta.values.length; ++i) {
+                const key = delta.values[i];
+                const stamp = delta.stamps[i];
+                patch_stamps.set(key, stamp);
+                if (stamp > 0)
+                    patch_array.push(key);
+            }
+            for (let i = 0; i < delta.values.length; ++i) {
+                const current_key = delta.values[i];
+                const current_patch_stamp = delta.stamps[i];
+                const current_self_stamp = (_a = this.stamps.get(current_key)) !== null && _a !== void 0 ? _a : 0;
+                const current_patch_version = this.clock.version_from(current_patch_stamp);
+                if (this.version_item(current_key) >= current_patch_version)
+                    continue;
+                this.stamps.set(current_key, current_patch_stamp);
+                this.version_feed(current_patch_version);
+                if (current_patch_stamp <= 0) {
+                    if (current_self_stamp > 0) {
+                        this.array.splice(this.array.indexOf(current_key), 1);
+                    }
+                    continue;
+                }
+                for (let anchor = patch_array.indexOf(current_key) - 1;; anchor--) {
+                    const anchor_key = patch_array[anchor];
+                    if (anchor >= 0) {
+                        const anchor_self_version = this.version_item(anchor_key);
+                        if (anchor_self_version === 0)
+                            continue;
+                        if (anchor_self_version > this.clock.version_from(patch_stamps.get(anchor_key)))
+                            continue;
+                    }
+                    let next_pos = anchor_key !== undefined ? this.array.indexOf(anchor_key) + 1 : 0;
+                    while (next_pos < this.array.length) {
+                        if (this.version_item(this.array[next_pos]) <= current_patch_version)
+                            break;
+                        next_pos++;
+                    }
+                    if (current_self_stamp <= 0) {
+                        this.array.splice(next_pos, 0, current_key);
+                        break;
+                    }
+                    const current_pos = this.array.indexOf(current_key);
+                    if (current_pos === next_pos)
+                        break;
+                    if (current_pos > next_pos) {
+                        this.array.splice(next_pos, current_pos - next_pos + 1, current_key, ...this.array.slice(next_pos, current_pos));
+                    }
+                    else {
+                        this.array.splice(current_pos, next_pos - current_pos + 1, ...this.array.slice(current_pos + 1, next_pos + 1), current_key);
+                    }
+                    break;
+                }
+            }
+            return this;
+        }
+    }
+    $.$hyoo_crowd_list = $hyoo_crowd_list;
+})($ || ($ = {}));
+//list.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    const tokenizer = $.$mol_regexp.from({
+        token: {
+            'line-break': /(?:\r?\n|\r)/,
+            'Word-punctuation-spaces': /[A-ZА-ЯЁ0-9\u0301\u0331]*[a-zа-яё0-9\u0301\u0331]*[^A-ZА-ЯЁa-zа-яё0-9\u0301\u0331\s]*[^\S\n\r]?/,
+        },
+    });
+    class $hyoo_crowd_text extends $.$hyoo_crowd_dict.of({
+        flow: $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }),
+        token: $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_reg }),
+    }) {
+        get root() {
+            return this.for('flow').for(null);
+        }
+        get tokens() {
+            return this.root.items();
+        }
+        value_of(token) {
+            return this.for('token').for(token).str();
+        }
+        text(next) {
+            if (next === undefined) {
+                const tokens = this.for('token');
+                return this.tokens.map(id => tokens.for(id).str()).join('');
+            }
+            else {
+                this.splice_line(null, 0, this.root.count, next);
+                return next;
+            }
+        }
+        splice_line(id, from, to, text) {
+            var _a, _b;
+            const flow = this.for('flow').for(id);
+            const token_ids = flow.items_internal;
+            const tokens = this.for('token');
+            const words = [...tokenizer.parse(text)];
+            while (from < to || words.length > 0) {
+                const prev = from < token_ids.length ? tokens.for(token_ids[from]).str() : null;
+                const next = words.length ? (_a = words[0].token) !== null && _a !== void 0 ? _a : words[0][0] : '';
+                const min_len = Math.max(1, Math.min((_b = prev === null || prev === void 0 ? void 0 : prev.length) !== null && _b !== void 0 ? _b : 0, next.length) - 1);
+                if (prev === next) {
+                    ++from;
+                    words.shift();
+                }
+                else if (prev && next && (prev.slice(0, min_len) === next.slice(0, min_len))) {
+                    tokens.for(token_ids[from]).str(next);
+                    ++from;
+                    words.shift();
+                }
+                else if (words.length > to - from) {
+                    let key;
+                    do {
+                        key = Math.floor(Math.random() * 1000000);
+                    } while (tokens.has(key));
+                    tokens.for(key).str(next);
+                    flow.insert(key, from);
+                    words.shift();
+                    ++from;
+                    ++to;
+                }
+                else if (words.length < to - from) {
+                    flow.cut(token_ids[from]);
+                    --to;
+                }
+                else {
+                    tokens.for(token_ids[from]).str(next);
+                    ++from;
+                    words.shift();
+                }
+            }
+            return this;
+        }
+        write(text, offset = -1, count = 0) {
+            if (offset < 0)
+                return this.splice_line(null, this.root.items_internal.length, 0, text);
+            const flow = this.for('flow').for(null);
+            const token_ids = flow.items_internal;
+            const tokens = this.for('token');
+            let from = 0;
+            let word = '';
+            while (true) {
+                if (from >= token_ids.length)
+                    break;
+                word = tokens.for(token_ids[from]).str();
+                if (offset <= word.length) {
+                    text = word.slice(0, offset) + text;
+                    count += offset;
+                    break;
+                }
+                offset -= word.length;
+                from++;
+            }
+            let to = from;
+            while (true) {
+                if (to >= token_ids.length)
+                    break;
+                word = tokens.for(token_ids[to]).str();
+                to++;
+                if (count < word.length) {
+                    text = text + word.slice(count);
+                    break;
+                }
+                count -= word.length;
+            }
+            this.splice_line(null, from, to, text);
+            return this;
+        }
+    }
+    $.$hyoo_crowd_text = $hyoo_crowd_text;
+})($ || ($ = {}));
+//text.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_graph extends $.$hyoo_crowd_dict.of({
+        val: $.$hyoo_crowd_union.of({
+            atom: $.$hyoo_crowd_reg,
+            text: $.$hyoo_crowd_text,
+            edge: $.$hyoo_crowd_list,
+        })
+    }) {
+        value(key, next) {
+            var _a, _b, _c, _d, _e, _f;
+            const store = this.for(key);
+            if (next === undefined) {
+                return (_f = (_d = (_b = (_a = store.as('edge')) === null || _a === void 0 ? void 0 : _a.items()) !== null && _b !== void 0 ? _b : (_c = store.as('text')) === null || _c === void 0 ? void 0 : _c.text()) !== null && _d !== void 0 ? _d : (_e = store.as('atom')) === null || _e === void 0 ? void 0 : _e.value()) !== null && _f !== void 0 ? _f : null;
+            }
+            else {
+                if (Array.isArray(next))
+                    store.to('edge').items(next);
+                else if (typeof next === 'string')
+                    store.to('text').text(next);
+                else
+                    store.to('atom').value(next);
+                return next;
+            }
+        }
+        bool(key, next) {
+            return this.for(key).to('atom').bool(next);
+        }
+        numb(key, next) {
+            return this.for(key).to('atom').numb(next);
+        }
+        text(key, next) {
+            return this.for(key).to('text').text(next);
+        }
+        edge(key, next) {
+            return this.for(key).to('edge').items(next);
+        }
+    }
+    $.$hyoo_crowd_graph = $hyoo_crowd_graph;
+})($ || ($ = {}));
+//graph.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_store_local_class extends $.$mol_store {
+        native() {
+            check: try {
+                const native = $.$mol_dom_context.localStorage;
+                if (!native)
+                    break check;
+                native.setItem('', '');
+                native.removeItem('');
+                return native;
+            }
+            catch (error) {
+                console.warn(error);
+            }
+            const dict = new Map();
+            return {
+                map: dict,
+                getItem: (key) => dict.get(key),
+                setItem: (key, value) => dict.set(key, value),
+                removeItem: (key) => dict.delete(key),
+            };
+        }
+        data() {
+            return $.$mol_fail(new Error('Forbidden for local storage'));
+        }
+        value(key, next, force) {
+            if (next === undefined)
+                return JSON.parse(this.native().getItem(key) || 'null');
+            if (next === null)
+                this.native().removeItem(key);
+            else
+                this.native().setItem(key, JSON.stringify(next));
+            return next;
+        }
+    }
+    __decorate([
+        $.$mol_mem
+    ], $mol_store_local_class.prototype, "native", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_local_class.prototype, "value", null);
+    $.$mol_store_local_class = $mol_store_local_class;
+    $.$mol_store_local = new $mol_store_local_class;
+})($ || ($ = {}));
+//local.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_store_shared extends $.$mol_store {
+        store(prefix) {
+            return new this.$.$hyoo_crowd_graph;
+        }
+        version_last(prefix, next) {
+            return next !== null && next !== void 0 ? next : this.store(prefix).clock.version_max;
+        }
+        request(prefix) {
+            this.socket();
+            $.$mol_fiber_defer(() => this.send(prefix, this.store(prefix).delta()));
+            return null;
+        }
+        value(key, next) {
+            let [prefix, ...tail] = key.split('/');
+            let suffix = tail.join('/');
+            if (!suffix) {
+                suffix = prefix;
+                prefix = '';
+            }
+            const store = this.store(prefix);
+            const prev = $.$mol_mem_cached(() => this.value(key));
+            this.request(prefix);
+            this.version_last(prefix);
+            if (next == undefined) {
+                const delta = this.$.$mol_store_local.value(prefix);
+                if (delta)
+                    store.apply(delta);
+                return store.value(suffix);
+            }
+            else {
+                const val = store.value(suffix, next);
+                $.$mol_fiber_defer(() => this.send(prefix, store.delta()));
+                this.$.$mol_store_local.value(prefix, store.delta());
+                return val;
+            }
+        }
+        sub(key, lens) {
+            const lens2 = super.sub(key, lens);
+            lens2.sub = (prefix, lens) => {
+                const lens3 = this.sub(key ? key + '/' + prefix : String(prefix), lens);
+                lens3.data_default = lens2.data_default && lens2.data_default[prefix] || lens3.data_default;
+                return lens3;
+            };
+            lens2.value = (suffix, next) => {
+                var _a;
+                return (_a = this.value(key ? key + '/' + suffix : String(suffix), next)) !== null && _a !== void 0 ? _a : (lens2.data_default && lens2.data_default[suffix]);
+            };
+            return lens2;
+        }
+        server() {
+            return `wss://sync-hyoo-ru.herokuapp.com/`;
+        }
+        socket() {
+            const atom = $.$mol_atom2.current;
+            const socket = new $.$mol_dom_context.WebSocket(this.server());
+            socket.onmessage = $.$mol_fiber.func(event => {
+                const message = JSON.parse(event.data);
+                if (!Array.isArray(message))
+                    return;
+                const [prefix, delta] = message;
+                if (typeof prefix !== 'string')
+                    return;
+                if (!delta)
+                    return;
+                const store = this.store(prefix);
+                store.apply(delta);
+                this.$.$mol_store_local.value(prefix, store.delta());
+                this.version_last(prefix, store.clock.version_max);
+            });
+            socket.onclose = socket.onerror = $.$mol_fiber.func(() => {
+                new this.$.$mol_after_timeout(5000, atom.fresh);
+            });
+            return socket;
+        }
+        send(key, next) {
+            const socket = this.socket();
+            if (socket.readyState === socket.CONNECTING) {
+                $.$mol_fiber_sync(() => new Promise(done => {
+                    socket.addEventListener('open', done);
+                }))();
+            }
+            const message = next === undefined ? [key] : [key, next];
+            socket.send(JSON.stringify(message));
+        }
+    }
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_shared.prototype, "store", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_shared.prototype, "version_last", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_shared.prototype, "request", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_shared.prototype, "value", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_shared.prototype, "sub", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_store_shared.prototype, "socket", null);
+    __decorate([
+        $.$mol_fiber.method
+    ], $mol_store_shared.prototype, "send", null);
+    $.$mol_store_shared = $mol_store_shared;
+})($ || ($ = {}));
+//shared.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_state_local extends $.$mol_object {
+        static native() {
+            if (this['native()'])
+                return this['native()'];
+            check: try {
+                const native = $.$mol_dom_context.localStorage;
+                if (!native)
+                    break check;
+                native.setItem('', '');
+                native.removeItem('');
+                return this['native()'] = native;
+            }
+            catch (error) {
+                console.warn(error);
+            }
+            return this['native()'] = {
+                getItem(key) {
+                    return this[':' + key];
+                },
+                setItem(key, value) {
+                    this[':' + key] = value;
+                },
+                removeItem(key) {
+                    this[':' + key] = void 0;
+                }
+            };
+        }
+        static value(key, next, force) {
+            if (next === void 0)
+                return JSON.parse(this.native().getItem(key) || 'null');
+            if (next === null)
+                this.native().removeItem(key);
+            else
+                this.native().setItem(key, JSON.stringify(next));
+            return next;
+        }
+        prefix() { return ''; }
+        value(key, next) {
+            return $mol_state_local.value(this.prefix() + '.' + key, next);
+        }
+    }
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_state_local, "value", null);
+    $.$mol_state_local = $mol_state_local;
+})($ || ($ = {}));
+//local.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    var _a;
+    const TextDecoder = (_a = globalThis.TextDecoder) !== null && _a !== void 0 ? _a : $node.util.TextDecoder;
+    function $mol_charset_decode(value, code = 'utf8') {
+        return new TextDecoder(code).decode(value);
+    }
+    $.$mol_charset_decode = $mol_charset_decode;
+})($ || ($ = {}));
+//decode.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    var _a;
+    const TextEncoder = (_a = globalThis.TextEncoder) !== null && _a !== void 0 ? _a : $node.util.TextEncoder;
+    const encoder = new TextEncoder();
+    function $mol_charset_encode(value) {
+        return encoder.encode(value);
+    }
+    $.$mol_charset_encode = $mol_charset_encode;
+})($ || ($ = {}));
+//encode.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_file_not_found extends Error {
+    }
+    $.$mol_file_not_found = $mol_file_not_found;
+    class $mol_file extends $.$mol_object {
+        static absolute(path) {
+            throw new Error('Not implemented yet');
+        }
+        static relative(path) {
+            throw new Error('Not implemented yet');
+        }
+        path() {
+            return '.';
+        }
+        parent() {
+            return this.resolve('..');
+        }
+        reset() {
+            try {
+                this.stat(undefined, $.$mol_mem_force_cache);
+            }
+            catch (error) {
+                if (error instanceof $mol_file_not_found)
+                    return;
+                return $.$mol_fail_hidden(error);
+            }
+        }
+        version() {
+            return this.stat().mtime.getTime().toString(36).toUpperCase();
+        }
+        watcher() {
+            console.warn('$mol_file_web.watcher() not implemented');
+            return {
+                destructor() { }
+            };
+        }
+        exists(next, force) {
+            let exists = true;
+            try {
+                this.stat();
+            }
+            catch (error) {
+                if (error instanceof $mol_file_not_found) {
+                    exists = false;
+                }
+                else {
+                    return $.$mol_fail_hidden(error);
+                }
+            }
+            if (next === undefined)
+                return exists;
+            if (next === exists)
+                return exists;
+            if (next)
+                this.parent().exists(true);
+            this.ensure(next);
+            this.reset();
+            return next;
+        }
+        type() {
+            return this.stat().type;
+        }
+        name() {
+            return this.path().replace(/^.*\//, '');
+        }
+        ext() {
+            const match = /((?:\.\w+)+)$/.exec(this.path());
+            return match ? match[1].substring(1) : '';
+        }
+        text(next, force) {
+            if (next === undefined) {
+                return $.$mol_charset_decode(this.buffer(undefined, force));
+            }
+            else {
+                const buffer = next === undefined ? undefined : $.$mol_charset_encode(next);
+                this.buffer(buffer, force);
+                return next;
+            }
+        }
+        fail(error) {
+            this.buffer(error, $.$mol_mem_force_fail);
+            this.stat(error, $.$mol_mem_force_fail);
+        }
+        buffer_cached(buffer) {
+            const ctime = new Date();
+            const stat = {
+                type: 'file',
+                size: buffer.length,
+                ctime,
+                atime: ctime,
+                mtime: ctime
+            };
+            this.buffer(buffer, $.$mol_mem_force_cache);
+            this.stat(stat, $.$mol_mem_force_cache);
+        }
+        text_cached(content) {
+            this.buffer_cached($.$mol_charset_encode(content));
+        }
+        find(include, exclude) {
+            const found = [];
+            const sub = this.sub();
+            for (const child of sub) {
+                const child_path = child.path();
+                if (exclude && child_path.match(exclude))
+                    continue;
+                if (!include || child_path.match(include))
+                    found.push(child);
+                if (child.type() === 'dir') {
+                    const sub_child = child.find(include, exclude);
+                    for (const child of sub_child)
+                        found.push(child);
+                }
+            }
+            return found;
+        }
+        size() {
+            switch (this.type()) {
+                case 'file': return this.stat().size;
+                default: return 0;
+            }
+        }
+    }
+    __decorate([
+        $.$mol_mem
+    ], $mol_file.prototype, "exists", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_file, "absolute", null);
+    $.$mol_file = $mol_file;
+})($ || ($ = {}));
+//file.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    function $mol_compare_array(a, b) {
+        if (a === b)
+            return true;
+        if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
+            return false;
+        if (a.length !== b.length)
+            return false;
+        for (let i = 0; i < a.length; i++)
+            if (a[i] !== b[i])
+                return false;
+        return true;
+    }
+    $.$mol_compare_array = $mol_compare_array;
+})($ || ($ = {}));
+//array.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    function stat_convert(stat) {
+        let type;
+        if (stat.isDirectory())
+            type = 'dir';
+        if (stat.isFile())
+            type = 'file';
+        if (stat.isSymbolicLink())
+            type = 'link';
+        if (!type)
+            return $.$mol_fail(new Error(`Unsupported file type`));
+        return {
+            type,
+            size: Number(stat.size),
+            atime: stat.atime,
+            mtime: stat.mtime,
+            ctime: stat.ctime
+        };
+    }
+    function buffer_normalize(buf) {
+        return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    class $mol_file_node extends $.$mol_file {
+        static absolute(path) {
+            return this.make({
+                path: $.$mol_const(path)
+            });
+        }
+        static relative(path) {
+            return this.absolute($node.path.resolve(path).replace(/\\/g, '/'));
+        }
+        watcher() {
+            const watcher = $node.chokidar.watch(this.path(), {
+                persistent: true,
+                ignored: /(^\.|___$)/,
+                depth: 0,
+                ignoreInitial: true,
+                awaitWriteFinish: {
+                    stabilityThreshold: 100,
+                },
+            });
+            watcher
+                .on('all', (type, path) => {
+                const file = $.$mol_file.relative(path.replace(/\\/g, '/'));
+                file.reset();
+                if (type === 'change') {
+                    file.buffer(undefined, $.$mol_mem_force_update);
+                }
+                else {
+                    file.parent().reset();
+                }
+            })
+                .on('error', (error) => {
+                this.stat(error, $.$mol_mem_force_fail);
+            });
+            return {
+                destructor() {
+                    watcher.close();
+                }
+            };
+        }
+        stat(next, force) {
+            let stat = next;
+            const path = this.path();
+            this.parent().watcher();
+            try {
+                stat = next !== null && next !== void 0 ? next : stat_convert($node.fs.statSync(path));
+            }
+            catch (error) {
+                if (error.code === 'ENOENT')
+                    error = new $.$mol_file_not_found(`File not found`);
+                error.message += '\n' + path;
+                return this.$.$mol_fail_hidden(error);
+            }
+            return stat;
+        }
+        ensure(next) {
+            const path = this.path();
+            try {
+                if (next)
+                    $node.fs.mkdirSync(path);
+                else
+                    $node.fs.unlinkSync(path);
+            }
+            catch (e) {
+                e.message += '\n' + path;
+                return this.$.$mol_fail_hidden(e);
+            }
+            return true;
+        }
+        buffer(next, force) {
+            const path = this.path();
+            if (next === undefined) {
+                this.stat();
+                try {
+                    const prev = $.$mol_mem_cached(() => this.buffer());
+                    next = buffer_normalize($node.fs.readFileSync(path));
+                    if (prev !== undefined && !$.$mol_compare_array(prev, next)) {
+                        this.$.$mol_log3_rise({
+                            place: `$mol_file_node..buffer()`,
+                            message: 'Changed',
+                            path: this.relate(),
+                        });
+                    }
+                    return next;
+                }
+                catch (error) {
+                    error.message += '\n' + path;
+                    return this.$.$mol_fail_hidden(error);
+                }
+            }
+            this.parent().exists(true);
+            try {
+                $node.fs.writeFileSync(path, next);
+            }
+            catch (error) {
+                error.message += '\n' + path;
+                return this.$.$mol_fail_hidden(error);
+            }
+            return next;
+        }
+        sub() {
+            if (!this.exists())
+                return [];
+            if (this.type() !== 'dir')
+                return [];
+            const path = this.path();
+            try {
+                return $node.fs.readdirSync(path)
+                    .filter(name => !/^\.+$/.test(name))
+                    .map(name => this.resolve(name));
+            }
+            catch (e) {
+                e.message += '\n' + path;
+                return this.$.$mol_fail_hidden(e);
+            }
+        }
+        resolve(path) {
+            return this.constructor.relative($node.path.join(this.path(), path));
+        }
+        relate(base = this.constructor.relative('.')) {
+            return $node.path.relative(base.path(), this.path()).replace(/\\/g, '/');
+        }
+        append(next) {
+            const path = this.path();
+            try {
+                $node.fs.appendFileSync(path, next);
+            }
+            catch (e) {
+                e.message += '\n' + path;
+                return this.$.$mol_fail_hidden(e);
+            }
+        }
+    }
+    __decorate([
+        $.$mol_mem
+    ], $mol_file_node.prototype, "watcher", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_file_node.prototype, "stat", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_file_node.prototype, "buffer", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_file_node.prototype, "sub", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_file_node, "absolute", null);
+    $.$mol_file_node = $mol_file_node;
+    $.$mol_file = $mol_file_node;
+})($ || ($ = {}));
+//file.node.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_locale extends $.$mol_object {
+        static lang_default() {
+            return 'en';
+        }
+        static lang(next) {
+            return $.$mol_state_local.value('locale', next) || $.$mol_dom_context.navigator.language.replace(/-.*/, '') || this.lang_default();
+        }
+        static source(lang) {
+            return JSON.parse($.$mol_file.relative(`web.locale=${lang}.json`).text().toString());
+        }
+        static texts(lang, next) {
+            if (next)
+                return next;
+            try {
+                return this.source(lang).valueOf();
+            }
+            catch (error) {
+                if ('then' in error)
+                    $.$mol_fail_hidden(error);
+                const def = this.lang_default();
+                if (lang === def)
+                    throw error;
+                return this.source(def);
+            }
+        }
+        static text(key) {
+            for (let lang of [this.lang(), 'en']) {
+                const text = this.texts(lang)[key];
+                if (text)
+                    return text;
+                this.warn(key);
+            }
+            return `<${key}>`;
+        }
+        static warn(key) {
+            console.warn(`Not translated to "${this.lang()}": ${key}`);
+            return null;
+        }
+    }
+    __decorate([
+        $.$mol_mem
+    ], $mol_locale, "lang_default", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_locale, "lang", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_locale, "source", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_locale, "texts", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_locale, "text", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_locale, "warn", null);
+    $.$mol_locale = $mol_locale;
+})($ || ($ = {}));
+//locale.js.map
+;
+"use strict";
+var $;
+(function ($) {
     class $mol_plugin extends $.$mol_view {
         dom_node(next) {
             const node = next || $.$mol_owning_get(this, $.$mol_view).dom_node();
@@ -4652,142 +6085,6 @@ var $;
     $.$mol_dimmer = $mol_dimmer;
 })($ || ($ = {}));
 //dimmer.view.tree.js.map
-;
-"use strict";
-//intersect.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class $mol_regexp extends RegExp {
-        constructor(source, flags = '', groups = []) {
-            super(source, flags);
-            this.groups = groups;
-        }
-        get parse() {
-            const self = this;
-            return function* parsing(str, from = 0) {
-                while (from < str.length) {
-                    self.lastIndex = from;
-                    const res = self.exec(str);
-                    if (res === null) {
-                        yield { 0: str.substring(from) };
-                        return null;
-                    }
-                    if (from === self.lastIndex) {
-                        $.$mol_fail(new Error('Captured empty substring'));
-                    }
-                    const found = {};
-                    const skipped = str.slice(from, self.lastIndex - res[0].length);
-                    if (skipped)
-                        yield { 0: skipped };
-                    from = self.lastIndex;
-                    for (let i = 0; i < self.groups.length; ++i) {
-                        const group = self.groups[i];
-                        found[group] = found[group] || res[i + 1] || '';
-                    }
-                    yield found;
-                }
-            };
-        }
-        static repeat(source, min = 0, max = Number.POSITIVE_INFINITY) {
-            const regexp = $mol_regexp.from(source);
-            const upper = Number.isFinite(max) ? max : '';
-            return new $mol_regexp(`(?:${regexp.source}){${min},${upper}}?`, regexp.flags, regexp.groups);
-        }
-        static repeat_greedy(source, min = 0, max = Number.POSITIVE_INFINITY) {
-            const regexp = $mol_regexp.from(source);
-            const upper = Number.isFinite(max) ? max : '';
-            return new $mol_regexp(`(?:${regexp.source}){${min},${upper}}`, regexp.flags, regexp.groups);
-        }
-        static optional(source) {
-            return $mol_regexp.repeat_greedy(source, 0, 1);
-        }
-        static force_after(source) {
-            const regexp = $mol_regexp.from(source);
-            return new $mol_regexp(`(?=${regexp.source})`, regexp.flags, regexp.groups);
-        }
-        static forbid_after(source) {
-            const regexp = $mol_regexp.from(source);
-            return new $mol_regexp(`(?!${regexp.source})`, regexp.flags, regexp.groups);
-        }
-        static from(source, { ignoreCase, multiline } = {
-            ignoreCase: false,
-            multiline: false,
-        }) {
-            let flags = 'gu';
-            if (multiline)
-                flags += 'm';
-            if (ignoreCase)
-                flags += 'i';
-            if (typeof source === 'string') {
-                return new $mol_regexp(source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
-            }
-            else if (source instanceof RegExp) {
-                if (source instanceof $mol_regexp)
-                    return source;
-                const test = new $mol_regexp('|' + source.source);
-                const groups = Array.from({ length: test.exec('').length - 1 }, (_, i) => String(i + 1));
-                return new $mol_regexp(source.source, source.flags, groups);
-            }
-            if (Array.isArray(source)) {
-                const sources = [];
-                const groups = [];
-                let index = 0;
-                for (const item of source) {
-                    const regexp = $mol_regexp.from(item);
-                    sources.push(regexp.source);
-                    for (let group of regexp.groups) {
-                        if (Number(group) >= 0) {
-                            groups.push(String(index++));
-                        }
-                        else {
-                            groups.push(group);
-                        }
-                    }
-                }
-                return new $mol_regexp(sources.join(''), flags, groups);
-            }
-            else {
-                const groups = [];
-                const chunks = Object.keys(source).map(name => {
-                    groups.push(name);
-                    const regexp = $mol_regexp.from(source[name]);
-                    groups.push(...regexp.groups);
-                    return `(${regexp.source})`;
-                });
-                return new $mol_regexp(`(?:${chunks.join('|')})`, flags, groups);
-            }
-        }
-        static char_code(code) {
-            return new $mol_regexp(`\\u${code.toString(16).padStart(4, '0')}`);
-        }
-        static char_range(from, to) {
-            return new $mol_regexp(`${$mol_regexp.char_code(from)}..${$mol_regexp.char_code(to)}`);
-        }
-        static char_only(...allowed) {
-            const regexp = allowed.map(f => $mol_regexp.from(f).source).join('');
-            return new $mol_regexp(`[${regexp}]`);
-        }
-        static char_except(...forbidden) {
-            const regexp = forbidden.map(f => $mol_regexp.from(f).source).join('');
-            return new $mol_regexp(`[^${regexp}]`);
-        }
-    }
-    $mol_regexp.char_any = $mol_regexp.from(/[\s\S]/);
-    $mol_regexp.digit = $mol_regexp.from(/\d/);
-    $mol_regexp.letter = $mol_regexp.from(/\w/);
-    $mol_regexp.space = $mol_regexp.from(/\s/);
-    $mol_regexp.tab = $mol_regexp.from(/\t/);
-    $mol_regexp.slash_back = $mol_regexp.from(/\\/);
-    $mol_regexp.word_break = $mol_regexp.from(/\b/);
-    $mol_regexp.line_end = $mol_regexp.from(/\r?\n/);
-    $mol_regexp.begin = $mol_regexp.from(/^/);
-    $mol_regexp.end = $mol_regexp.from(/$/);
-    $mol_regexp.or = $mol_regexp.from(/|/);
-    $.$mol_regexp = $mol_regexp;
-})($ || ($ = {}));
-//regexp.js.map
 ;
 "use strict";
 var $;
@@ -6535,13 +7832,30 @@ var $;
 var $;
 (function ($) {
     class $my_wiki extends $.$mol_page {
-        title() {
-            return "My Wiki";
+        Store() {
+            const obj = new this.$.$mol_store_shared();
+            return obj;
+        }
+        head() {
+            return [
+                this.Title()
+            ];
         }
         body() {
             return [
                 this.Text()
             ];
+        }
+        title(val) {
+            if (val !== undefined)
+                return val;
+            return this.$.$mol_locale.text('$my_wiki_title');
+        }
+        Title() {
+            const obj = new this.$.$mol_string();
+            obj.hint = () => this.$.$mol_locale.text('$my_wiki_Title_hint');
+            obj.value = (val) => this.title(val);
+            return obj;
         }
         text(val) {
             if (val !== undefined)
@@ -6550,11 +7864,20 @@ var $;
         }
         Text() {
             const obj = new this.$.$mol_textarea();
-            obj.hint = () => "What do you think?";
+            obj.hint = () => this.$.$mol_locale.text('$my_wiki_Text_hint');
             obj.value = (val) => this.text(val);
             return obj;
         }
     }
+    __decorate([
+        $.$mol_mem
+    ], $my_wiki.prototype, "Store", null);
+    __decorate([
+        $.$mol_mem
+    ], $my_wiki.prototype, "title", null);
+    __decorate([
+        $.$mol_mem
+    ], $my_wiki.prototype, "Title", null);
     __decorate([
         $.$mol_mem
     ], $my_wiki.prototype, "text", null);
@@ -6568,53 +7891,21 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    class $mol_state_local extends $.$mol_object {
-        static native() {
-            if (this['native()'])
-                return this['native()'];
-            check: try {
-                const native = $.$mol_dom_context.localStorage;
-                if (!native)
-                    break check;
-                native.setItem('', '');
-                native.removeItem('');
-                return this['native()'] = native;
+    var $$;
+    (function ($$) {
+        class $my_wiki_note extends $.$mol_store {
+            title(next) {
+                var _a, _b, _c;
+                return (_c = (_a = this.value('title', next)) !== null && _a !== void 0 ? _a : (_b = this.text()) === null || _b === void 0 ? void 0 : _b.replace(/\n[\s\S]*/, '')) !== null && _c !== void 0 ? _c : null;
             }
-            catch (error) {
-                console.warn(error);
+            text(next) {
+                return this.value('text', next);
             }
-            return this['native()'] = {
-                getItem(key) {
-                    return this[':' + key];
-                },
-                setItem(key, value) {
-                    this[':' + key] = value;
-                },
-                removeItem(key) {
-                    this[':' + key] = void 0;
-                }
-            };
         }
-        static value(key, next, force) {
-            if (next === void 0)
-                return JSON.parse(this.native().getItem(key) || 'null');
-            if (next === null)
-                this.native().removeItem(key);
-            else
-                this.native().setItem(key, JSON.stringify(next));
-            return next;
-        }
-        prefix() { return ''; }
-        value(key, next) {
-            return $mol_state_local.value(this.prefix() + '.' + key, next);
-        }
-    }
-    __decorate([
-        $.$mol_mem_key
-    ], $mol_state_local, "value", null);
-    $.$mol_state_local = $mol_state_local;
+        $$.$my_wiki_note = $my_wiki_note;
+    })($$ = $.$$ || ($.$$ = {}));
 })($ || ($ = {}));
-//local.js.map
+//note.js.map
 ;
 "use strict";
 var $;
@@ -6633,11 +7924,24 @@ var $;
     var $$;
     (function ($$) {
         class $my_wiki extends $.$my_wiki {
+            Note(id) {
+                return this.Store().sub(id, new $$.$my_wiki_note);
+            }
+            Wiki() {
+                return this.Note('wiki');
+            }
+            title(next) {
+                var _a;
+                return (_a = this.Wiki().title(next)) !== null && _a !== void 0 ? _a : super.title();
+            }
             text(next) {
                 var _a;
-                return (_a = this.$.$mol_state_local.value('text', next)) !== null && _a !== void 0 ? _a : '';
+                return (_a = this.Wiki().text(next)) !== null && _a !== void 0 ? _a : '';
             }
         }
+        __decorate([
+            $.$mol_mem
+        ], $my_wiki.prototype, "Note", null);
         $$.$my_wiki = $my_wiki;
     })($$ = $.$$ || ($.$$ = {}));
 })($ || ($ = {}));
@@ -6769,424 +8073,6 @@ var $;
     $.$mol_view_tree_test_attributes_subcomponent_page = $mol_view_tree_test_attributes_subcomponent_page;
 })($ || ($ = {}));
 //subcomponent.view.tree.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    var _a;
-    const TextDecoder = (_a = globalThis.TextDecoder) !== null && _a !== void 0 ? _a : $node.util.TextDecoder;
-    function $mol_charset_decode(value, code = 'utf8') {
-        return new TextDecoder(code).decode(value);
-    }
-    $.$mol_charset_decode = $mol_charset_decode;
-})($ || ($ = {}));
-//decode.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    var _a;
-    const TextEncoder = (_a = globalThis.TextEncoder) !== null && _a !== void 0 ? _a : $node.util.TextEncoder;
-    const encoder = new TextEncoder();
-    function $mol_charset_encode(value) {
-        return encoder.encode(value);
-    }
-    $.$mol_charset_encode = $mol_charset_encode;
-})($ || ($ = {}));
-//encode.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class $mol_file_not_found extends Error {
-    }
-    $.$mol_file_not_found = $mol_file_not_found;
-    class $mol_file extends $.$mol_object {
-        static absolute(path) {
-            throw new Error('Not implemented yet');
-        }
-        static relative(path) {
-            throw new Error('Not implemented yet');
-        }
-        path() {
-            return '.';
-        }
-        parent() {
-            return this.resolve('..');
-        }
-        reset() {
-            try {
-                this.stat(undefined, $.$mol_mem_force_cache);
-            }
-            catch (error) {
-                if (error instanceof $mol_file_not_found)
-                    return;
-                return $.$mol_fail_hidden(error);
-            }
-        }
-        version() {
-            return this.stat().mtime.getTime().toString(36).toUpperCase();
-        }
-        watcher() {
-            console.warn('$mol_file_web.watcher() not implemented');
-            return {
-                destructor() { }
-            };
-        }
-        exists(next, force) {
-            let exists = true;
-            try {
-                this.stat();
-            }
-            catch (error) {
-                if (error instanceof $mol_file_not_found) {
-                    exists = false;
-                }
-                else {
-                    return $.$mol_fail_hidden(error);
-                }
-            }
-            if (next === undefined)
-                return exists;
-            if (next === exists)
-                return exists;
-            if (next)
-                this.parent().exists(true);
-            this.ensure(next);
-            this.reset();
-            return next;
-        }
-        type() {
-            return this.stat().type;
-        }
-        name() {
-            return this.path().replace(/^.*\//, '');
-        }
-        ext() {
-            const match = /((?:\.\w+)+)$/.exec(this.path());
-            return match ? match[1].substring(1) : '';
-        }
-        text(next, force) {
-            if (next === undefined) {
-                return $.$mol_charset_decode(this.buffer(undefined, force));
-            }
-            else {
-                const buffer = next === undefined ? undefined : $.$mol_charset_encode(next);
-                this.buffer(buffer, force);
-                return next;
-            }
-        }
-        fail(error) {
-            this.buffer(error, $.$mol_mem_force_fail);
-            this.stat(error, $.$mol_mem_force_fail);
-        }
-        buffer_cached(buffer) {
-            const ctime = new Date();
-            const stat = {
-                type: 'file',
-                size: buffer.length,
-                ctime,
-                atime: ctime,
-                mtime: ctime
-            };
-            this.buffer(buffer, $.$mol_mem_force_cache);
-            this.stat(stat, $.$mol_mem_force_cache);
-        }
-        text_cached(content) {
-            this.buffer_cached($.$mol_charset_encode(content));
-        }
-        find(include, exclude) {
-            const found = [];
-            const sub = this.sub();
-            for (const child of sub) {
-                const child_path = child.path();
-                if (exclude && child_path.match(exclude))
-                    continue;
-                if (!include || child_path.match(include))
-                    found.push(child);
-                if (child.type() === 'dir') {
-                    const sub_child = child.find(include, exclude);
-                    for (const child of sub_child)
-                        found.push(child);
-                }
-            }
-            return found;
-        }
-        size() {
-            switch (this.type()) {
-                case 'file': return this.stat().size;
-                default: return 0;
-            }
-        }
-    }
-    __decorate([
-        $.$mol_mem
-    ], $mol_file.prototype, "exists", null);
-    __decorate([
-        $.$mol_mem_key
-    ], $mol_file, "absolute", null);
-    $.$mol_file = $mol_file;
-})($ || ($ = {}));
-//file.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    function $mol_compare_array(a, b) {
-        if (a === b)
-            return true;
-        if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
-            return false;
-        if (a.length !== b.length)
-            return false;
-        for (let i = 0; i < a.length; i++)
-            if (a[i] !== b[i])
-                return false;
-        return true;
-    }
-    $.$mol_compare_array = $mol_compare_array;
-})($ || ($ = {}));
-//array.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    function stat_convert(stat) {
-        let type;
-        if (stat.isDirectory())
-            type = 'dir';
-        if (stat.isFile())
-            type = 'file';
-        if (stat.isSymbolicLink())
-            type = 'link';
-        if (!type)
-            return $.$mol_fail(new Error(`Unsupported file type`));
-        return {
-            type,
-            size: Number(stat.size),
-            atime: stat.atime,
-            mtime: stat.mtime,
-            ctime: stat.ctime
-        };
-    }
-    function buffer_normalize(buf) {
-        return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-    }
-    class $mol_file_node extends $.$mol_file {
-        static absolute(path) {
-            return this.make({
-                path: $.$mol_const(path)
-            });
-        }
-        static relative(path) {
-            return this.absolute($node.path.resolve(path).replace(/\\/g, '/'));
-        }
-        watcher() {
-            const watcher = $node.chokidar.watch(this.path(), {
-                persistent: true,
-                ignored: /(^\.|___$)/,
-                depth: 0,
-                ignoreInitial: true,
-                awaitWriteFinish: {
-                    stabilityThreshold: 100,
-                },
-            });
-            watcher
-                .on('all', (type, path) => {
-                const file = $.$mol_file.relative(path.replace(/\\/g, '/'));
-                file.reset();
-                if (type === 'change') {
-                    file.buffer(undefined, $.$mol_mem_force_update);
-                }
-                else {
-                    file.parent().reset();
-                }
-            })
-                .on('error', (error) => {
-                this.stat(error, $.$mol_mem_force_fail);
-            });
-            return {
-                destructor() {
-                    watcher.close();
-                }
-            };
-        }
-        stat(next, force) {
-            let stat = next;
-            const path = this.path();
-            this.parent().watcher();
-            try {
-                stat = next !== null && next !== void 0 ? next : stat_convert($node.fs.statSync(path));
-            }
-            catch (error) {
-                if (error.code === 'ENOENT')
-                    error = new $.$mol_file_not_found(`File not found`);
-                error.message += '\n' + path;
-                return this.$.$mol_fail_hidden(error);
-            }
-            return stat;
-        }
-        ensure(next) {
-            const path = this.path();
-            try {
-                if (next)
-                    $node.fs.mkdirSync(path);
-                else
-                    $node.fs.unlinkSync(path);
-            }
-            catch (e) {
-                e.message += '\n' + path;
-                return this.$.$mol_fail_hidden(e);
-            }
-            return true;
-        }
-        buffer(next, force) {
-            const path = this.path();
-            if (next === undefined) {
-                this.stat();
-                try {
-                    const prev = $.$mol_mem_cached(() => this.buffer());
-                    next = buffer_normalize($node.fs.readFileSync(path));
-                    if (prev !== undefined && !$.$mol_compare_array(prev, next)) {
-                        this.$.$mol_log3_rise({
-                            place: `$mol_file_node..buffer()`,
-                            message: 'Changed',
-                            path: this.relate(),
-                        });
-                    }
-                    return next;
-                }
-                catch (error) {
-                    error.message += '\n' + path;
-                    return this.$.$mol_fail_hidden(error);
-                }
-            }
-            this.parent().exists(true);
-            try {
-                $node.fs.writeFileSync(path, next);
-            }
-            catch (error) {
-                error.message += '\n' + path;
-                return this.$.$mol_fail_hidden(error);
-            }
-            return next;
-        }
-        sub() {
-            if (!this.exists())
-                return [];
-            if (this.type() !== 'dir')
-                return [];
-            const path = this.path();
-            try {
-                return $node.fs.readdirSync(path)
-                    .filter(name => !/^\.+$/.test(name))
-                    .map(name => this.resolve(name));
-            }
-            catch (e) {
-                e.message += '\n' + path;
-                return this.$.$mol_fail_hidden(e);
-            }
-        }
-        resolve(path) {
-            return this.constructor.relative($node.path.join(this.path(), path));
-        }
-        relate(base = this.constructor.relative('.')) {
-            return $node.path.relative(base.path(), this.path()).replace(/\\/g, '/');
-        }
-        append(next) {
-            const path = this.path();
-            try {
-                $node.fs.appendFileSync(path, next);
-            }
-            catch (e) {
-                e.message += '\n' + path;
-                return this.$.$mol_fail_hidden(e);
-            }
-        }
-    }
-    __decorate([
-        $.$mol_mem
-    ], $mol_file_node.prototype, "watcher", null);
-    __decorate([
-        $.$mol_mem
-    ], $mol_file_node.prototype, "stat", null);
-    __decorate([
-        $.$mol_mem
-    ], $mol_file_node.prototype, "buffer", null);
-    __decorate([
-        $.$mol_mem
-    ], $mol_file_node.prototype, "sub", null);
-    __decorate([
-        $.$mol_mem_key
-    ], $mol_file_node, "absolute", null);
-    $.$mol_file_node = $mol_file_node;
-    $.$mol_file = $mol_file_node;
-})($ || ($ = {}));
-//file.node.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class $mol_locale extends $.$mol_object {
-        static lang_default() {
-            return 'en';
-        }
-        static lang(next) {
-            return $.$mol_state_local.value('locale', next) || $.$mol_dom_context.navigator.language.replace(/-.*/, '') || this.lang_default();
-        }
-        static source(lang) {
-            return JSON.parse($.$mol_file.relative(`web.locale=${lang}.json`).text().toString());
-        }
-        static texts(lang, next) {
-            if (next)
-                return next;
-            try {
-                return this.source(lang).valueOf();
-            }
-            catch (error) {
-                if ('then' in error)
-                    $.$mol_fail_hidden(error);
-                const def = this.lang_default();
-                if (lang === def)
-                    throw error;
-                return this.source(def);
-            }
-        }
-        static text(key) {
-            for (let lang of [this.lang(), 'en']) {
-                const text = this.texts(lang)[key];
-                if (text)
-                    return text;
-                this.warn(key);
-            }
-            return `<${key}>`;
-        }
-        static warn(key) {
-            console.warn(`Not translated to "${this.lang()}": ${key}`);
-            return null;
-        }
-    }
-    __decorate([
-        $.$mol_mem
-    ], $mol_locale, "lang_default", null);
-    __decorate([
-        $.$mol_mem
-    ], $mol_locale, "lang", null);
-    __decorate([
-        $.$mol_mem_key
-    ], $mol_locale, "source", null);
-    __decorate([
-        $.$mol_mem_key
-    ], $mol_locale, "texts", null);
-    __decorate([
-        $.$mol_mem_key
-    ], $mol_locale, "text", null);
-    __decorate([
-        $.$mol_mem_key
-    ], $mol_locale, "warn", null);
-    $.$mol_locale = $mol_locale;
-})($ || ($ = {}));
-//locale.js.map
 ;
 "use strict";
 var $;
@@ -9639,64 +10525,805 @@ var $;
 ;
 "use strict";
 var $;
-(function ($_1) {
-    var $$;
-    (function ($$) {
-        $_1.$mol_test({
-            'handle clicks by default'($) {
-                let clicked = false;
-                const clicker = $$.$mol_button.make({
-                    $,
-                    event_click: (event) => { clicked = true; },
-                });
-                const element = clicker.dom_tree();
-                const event = $_1.$mol_dom_context.document.createEvent('mouseevent');
-                event.initEvent('click', true, true);
-                element.dispatchEvent(event);
-                $_1.$mol_assert_ok(clicked);
-            },
-            'no handle clicks if disabled'($) {
-                let clicked = false;
-                const clicker = $$.$mol_button.make({
-                    $,
-                    event_click: (event) => { clicked = true; },
-                    enabled: () => false,
-                });
-                const element = clicker.dom_tree();
-                const event = $_1.$mol_dom_context.document.createEvent('mouseevent');
-                event.initEvent('click', true, true);
-                element.dispatchEvent(event);
-                $_1.$mol_assert_not(clicked);
-            },
-        });
-    })($$ = $_1.$$ || ($_1.$$ = {}));
+(function ($) {
+    $.$mol_test({
+        'default data'() {
+            const store = new $.$mol_store({
+                foo: 1,
+                bar: 2,
+            });
+            $.$mol_assert_equal(store.data().foo, 1);
+            $.$mol_assert_equal(store.data().bar, 2);
+        },
+        'safe reference'() {
+            const foo = { foo: 1 };
+            const bar = { bar: 1 };
+            const store = new $.$mol_store({ foo, bar });
+            store.data({ foo, bar });
+            store.data({
+                foo: { foo: 1 },
+                bar: { bar: 3 },
+            });
+            $.$mol_assert_equal(store.data().foo, foo);
+            $.$mol_assert_unique(store.data().bar, bar);
+        },
+        'get and set by shapshot'() {
+            const store = new $.$mol_store({
+                foo: 1,
+                bar: 2,
+            });
+            $.$mol_assert_equal(store.snapshot(), '{"foo":1,"bar":2}');
+            store.snapshot('{"foo":2,"bar":1}');
+            $.$mol_assert_equal(store.data().foo, 2);
+            $.$mol_assert_equal(store.data().bar, 1);
+        },
+        'get and set by key'() {
+            const store = new $.$mol_store({
+                foo: 1,
+            });
+            $.$mol_assert_equal(store.value('foo'), 1);
+            store.value('foo', 2);
+            $.$mol_assert_equal(store.value('foo'), 2);
+        },
+        'get and set by lens'() {
+            const store = new $.$mol_store({
+                foo: 1,
+            });
+            const lens = store.sub('foo');
+            $.$mol_assert_equal(lens.data(), 1);
+            lens.data(2);
+            $.$mol_assert_equal(lens.data(), 2);
+        },
+        'views and actions'() {
+            const Person = class extends $.$mol_store {
+                get full_name() {
+                    const name = this.value('name');
+                    return name.first + ' ' + name.last;
+                }
+                swap_names() {
+                    const name = this.value('name');
+                    this.value('name', {
+                        first: name.last,
+                        last: name.first,
+                    });
+                }
+            };
+            const store = new Person({
+                name: {
+                    first: 'Foo',
+                    last: 'Bar',
+                },
+            });
+            $.$mol_assert_equal(store.full_name, 'Foo Bar');
+            store.swap_names();
+            $.$mol_assert_equal(store.full_name, 'Bar Foo');
+        },
+        'nested views and actions'() {
+            class Person extends $.$mol_store {
+                get full_name() {
+                    const name = this.value('name');
+                    return name.first + ' ' + name.last;
+                }
+                swap_names() {
+                    const name = this.value('name');
+                    this.value('name', {
+                        first: name.last,
+                        last: name.first,
+                    });
+                }
+            }
+            class Band extends $.$mol_store {
+                get members() {
+                    const lens = this.sub('members');
+                    return new Proxy({}, {
+                        get: (_, id) => lens.sub(id, new Person),
+                    });
+                }
+            }
+            const band = new Band({
+                name: 'Dream Team',
+                members: {
+                    foo: {
+                        name: {
+                            first: 'Foo',
+                            last: 'Bar',
+                        },
+                    }
+                }
+            });
+            const person = band.members['foo'];
+            $.$mol_assert_equal(person.full_name, 'Foo Bar');
+            person.swap_names();
+            $.$mol_assert_equal(band.data().members['foo'].name.first, 'Bar');
+            $.$mol_assert_equal(band.data().members['foo'].name.last, 'Foo');
+        },
+    });
 })($ || ($ = {}));
-//button.test.js.map
+//store.test.js.map
 ;
 "use strict";
 var $;
 (function ($) {
     $.$mol_test({
-        'all cases of using maybe'() {
-            $.$mol_assert_equal($.$mol_maybe(0)[0], 0);
-            $.$mol_assert_equal($.$mol_maybe(false)[0], false);
-            $.$mol_assert_equal($.$mol_maybe(null)[0], void 0);
-            $.$mol_assert_equal($.$mol_maybe(void 0)[0], void 0);
-            $.$mol_assert_equal($.$mol_maybe(void 0).map(v => v.toString())[0], void 0);
-            $.$mol_assert_equal($.$mol_maybe(0).map(v => v.toString())[0], '0');
+        'is_new'() {
+            const clock = new $.$hyoo_crowd_clock;
+            clock.feed(1000001);
+            clock.feed(-2000002);
+            $.$mol_assert_ok(clock.is_new(-2000003));
+            $.$mol_assert_ok(clock.is_new(2000003));
+            $.$mol_assert_ok(clock.is_new(3000001));
+            $.$mol_assert_not(clock.is_new(1000002));
+            $.$mol_assert_not(0);
+        },
+        'fork'() {
+            const left = new $.$hyoo_crowd_clock(1);
+            left.feed(1000001);
+            left.feed(-2000002);
+            const right = left.fork(2);
+            $.$mol_assert_equal(right.version_max, 2000002);
+            $.$mol_assert_like([...right.saw_versions], [
+                [1, 1000001],
+                [2, 2000002],
+            ]);
+        },
+        'generate'() {
+            const clock = new $.$hyoo_crowd_clock(1);
+            clock.feed(1000001);
+            clock.feed(-2000002);
+            const stamp = clock.generate();
+            $.$mol_assert_equal(stamp, 3000001);
+            $.$mol_assert_equal(clock.version_max, 3000001);
+            $.$mol_assert_like([...clock.saw_versions], [
+                [1, 3000001],
+                [2, 2000002],
+            ]);
+        },
+        'is_ahead'() {
+            const clock1 = new $.$hyoo_crowd_clock;
+            clock1.feed(1000001);
+            clock1.feed(-2000002);
+            const clock2 = new $.$hyoo_crowd_clock;
+            clock2.feed(1000001);
+            clock2.feed(-2000003);
+            const clock3 = new $.$hyoo_crowd_clock;
+            clock3.feed(1000001);
+            clock3.feed(2000002);
+            clock3.feed(2000003);
+            $.$mol_assert_ok(clock1.is_ahead(clock2));
+            $.$mol_assert_ok(clock2.is_ahead(clock1));
+            $.$mol_assert_ok(clock3.is_ahead(clock1));
+            $.$mol_assert_ok(clock3.is_ahead(clock2));
+            $.$mol_assert_not(clock1.is_ahead(clock3));
+            $.$mol_assert_not(clock2.is_ahead(clock3));
         },
     });
 })($ || ($ = {}));
-//maybe.test.js.map
+//clock.test.js.map
 ;
 "use strict";
 var $;
-(function ($_1) {
-    $_1.$mol_test_mocks.push($ => {
-        $.$mol_after_work = $_1.$mol_after_mock_timeout;
+(function ($) {
+    $.$mol_test({
+        'Default state'() {
+            const store = new $.$hyoo_crowd_reg();
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], []));
+            $.$mol_assert_like(store.value(), null);
+            $.$mol_assert_like(store.version, 0);
+        },
+        'Serial changes'() {
+            const store = new $.$hyoo_crowd_reg().fork(1);
+            store.str('foo');
+            store.str('bar');
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['bar'], [+2000001]));
+        },
+        'Ignore same changes'() {
+            const store = new $.$hyoo_crowd_reg().fork(1);
+            store.str('foo');
+            store.str('foo');
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo'], [+1000001]));
+        },
+        'Slice after version'() {
+            const store = new $.$hyoo_crowd_reg().fork(1);
+            store.str('foo');
+            const clock1 = store.clock.fork(0);
+            store.str('bar');
+            const clock2 = store.clock.fork(0);
+            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['bar'], [+2000001]));
+            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], []));
+        },
+        'Cuncurrent changes'() {
+            const base = new $.$hyoo_crowd_reg().fork(1);
+            base.str('foo');
+            const left = base.fork(2);
+            left.str('bar');
+            const right = base.fork(3);
+            right.str('xxx');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), {
+                values: ['xxx'],
+                stamps: [+2000003],
+            });
+        },
     });
 })($ || ($ = {}));
-//work.test.js.map
+//reg.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'Default state'() {
+            const val = new $.$hyoo_crowd_numb();
+            $.$mol_assert_like(val.delta(), $.$hyoo_crowd_delta([], []));
+            $.$mol_assert_like(val.numb(), 0);
+        },
+        'Serial changes'() {
+            const store = new $.$hyoo_crowd_numb().fork(1).shift(+5).shift(-3);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([+2], [+2000001]));
+            $.$mol_assert_like(store.numb(), 2);
+        },
+        'Slice after version'() {
+            const store = new $.$hyoo_crowd_numb();
+            const store1 = store.fork(1).shift(+5);
+            const clock1 = store1.clock.fork(0);
+            store1.shift(-3);
+            const clock2 = store1.clock.fork(0);
+            const store2 = store1.fork(2).shift(-2);
+            const clock3 = store2.clock.fork(0);
+            $.$mol_assert_like(store2.delta(clock1), $.$hyoo_crowd_delta([+2, -2], [+2000001, +3000002]));
+            $.$mol_assert_like(store2.delta(clock2), $.$hyoo_crowd_delta([-2], [+3000002]));
+            $.$mol_assert_like(store2.delta(clock3), $.$hyoo_crowd_delta([], []));
+        },
+        'Concurrent changes'() {
+            const base = new $.$hyoo_crowd_numb().fork(1).shift(+5);
+            const left = base.fork(2).shift(+3).shift(+1);
+            const right = base.fork(3).shift(-2).shift(+1);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like(left.numb(), right.numb(), 8);
+        },
+    });
+})($ || ($ = {}));
+//numb.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_numb extends $.$hyoo_crowd_store {
+        constructor() {
+            super(...arguments);
+            this.stores = new Map();
+        }
+        value() {
+            let res = 0;
+            for (const store of this.stores.values()) {
+                res += store.numb();
+            }
+            return res;
+        }
+        numb() {
+            return this.value();
+        }
+        delta(clock = new $.$hyoo_crowd_clock) {
+            const delta = $.$hyoo_crowd_delta([], []);
+            for (const store of this.stores.values()) {
+                const patch = store.delta(clock);
+                if (patch.values.length === 0)
+                    continue;
+                delta.values.push(...patch.values);
+                delta.stamps.push(...patch.stamps);
+            }
+            return delta;
+        }
+        reg(path) {
+            let store = this.stores.get(path);
+            if (store)
+                return store;
+            store = new $.$hyoo_crowd_reg(this.clock);
+            this.stores.set(path, store);
+            return store;
+        }
+        shift(diff = 1) {
+            const store = this.reg(this.clock.peer);
+            const prev = Number(store.numb());
+            store.numb(prev + diff);
+            return this;
+        }
+        apply(delta) {
+            for (let i = 0; i < delta.values.length; ++i) {
+                const peer = this.clock.peer_from(delta.stamps[i]);
+                this.reg(peer).apply($.$hyoo_crowd_delta([delta.values[i]], [delta.stamps[i]]));
+            }
+            return this;
+        }
+    }
+    $.$hyoo_crowd_numb = $hyoo_crowd_numb;
+})($ || ($ = {}));
+//numb.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'Add keys'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').add('bar').delta(), $.$hyoo_crowd_delta(['foo', 'bar'], [+1000001, +2000001]));
+        },
+        'Slice after version'() {
+            const store = new $.$hyoo_crowd_set().fork(1);
+            store.add('foo');
+            const clock1 = store.clock.fork(0);
+            store.add('bar');
+            const clock2 = store.clock.fork(0);
+            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['bar'], [+2000001]));
+            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], []));
+        },
+        'Ignore existen keys'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').add('foo').delta(), $.$hyoo_crowd_delta(['foo'], [+1000001]));
+        },
+        'Partial remove keys'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').add('bar').remove('foo').delta(), $.$hyoo_crowd_delta(['foo', 'bar'], [-3000001, +2000001]));
+        },
+        'Ignore already removed keys'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').remove('foo').remove('foo').delta(), $.$hyoo_crowd_delta(['foo'], [-2000001]));
+        },
+        'Convert to native Set'() {
+            const store = new $.$hyoo_crowd_set().fork(1).add('foo').add('xxx').remove('foo');
+            $.$mol_assert_like(store.items, ["xxx"]);
+        },
+        'Merge different sets'() {
+            const left = new $.$hyoo_crowd_set().fork(2).add('foo').add('bar');
+            const right = new $.$hyoo_crowd_set().fork(3).add('xxx').add('yyy').remove('xxx');
+            const left_delta = left.delta();
+            const right_delta = right.delta();
+            $.$mol_assert_like(left.apply(right_delta).items.sort(), right.apply(left_delta).items.sort(), ['bar', 'foo', 'yyy']);
+        },
+        'Merge branches with common base'() {
+            const base = new $.$hyoo_crowd_set().fork(1).add('foo').add('bar');
+            const left = base.fork(2).add('xxx');
+            const right = base.fork(3).remove('foo');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).items.sort(), right.apply(left_delta).items.sort(), ['bar', 'xxx']);
+        },
+        'Concurrent Add and Remove'() {
+            const base = new $.$hyoo_crowd_set().fork(1).add('foo');
+            const left = base.fork(2).add('foo').remove('bar');
+            const right = base.fork(3).remove('foo').add('bar');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).items.sort(), right.apply(left_delta).items.sort(), ['bar']);
+        },
+        'Number ids support'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add(1).add(2).add(2).delta(), $.$hyoo_crowd_delta([1, 2], [+1000001, +2000001]));
+        },
+    });
+})($ || ($ = {}));
+//set.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crowd_set extends $.$hyoo_crowd_store {
+        constructor() {
+            super(...arguments);
+            this.stamps = new Map();
+        }
+        get count() {
+            return this.items.length;
+        }
+        get items() {
+            const delta = this.delta();
+            return delta.values.filter((_, index) => delta.stamps[index] > 0);
+        }
+        has(val) {
+            return this.stamps.get(val) > 0;
+        }
+        version_item(val) {
+            var _a;
+            return this.clock.version_from((_a = this.stamps.get(val)) !== null && _a !== void 0 ? _a : 0);
+        }
+        delta(clock = new $.$hyoo_crowd_clock) {
+            const delta = $.$hyoo_crowd_delta([], []);
+            for (const [key, stamp] of this.stamps) {
+                if (!clock.is_new(stamp))
+                    continue;
+                delta.values.push(key);
+                delta.stamps.push(stamp);
+            }
+            return delta;
+        }
+        add(key) {
+            if (this.has(key))
+                return this;
+            this.apply($.$hyoo_crowd_delta([key], [this.clock.generate()]));
+            return this;
+        }
+        remove(key) {
+            if (!this.has(key))
+                return this;
+            this.apply($.$hyoo_crowd_delta([key], [-this.clock.generate()]));
+            return this;
+        }
+        apply(delta) {
+            for (let i = 0; i < delta.values.length; ++i) {
+                const key = delta.values[i];
+                const stamp = delta.stamps[i];
+                const version = this.clock.version_from(stamp);
+                if (this.version_item(key) >= version)
+                    continue;
+                this.stamps.set(key, stamp);
+                this.clock.feed(version);
+            }
+            return this;
+        }
+    }
+    $.$hyoo_crowd_set = $hyoo_crowd_set;
+})($ || ($ = {}));
+//set.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'Put values to end'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar').delta(), $.$hyoo_crowd_delta(['foo', 'bar'], [+1000001, +2000001]));
+        },
+        'Ignore existen values'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('foo').delta(), $.$hyoo_crowd_delta(['foo'], [+2000001]));
+        },
+        'Slice after version'() {
+            const store = new $.$hyoo_crowd_list().fork(1);
+            store.insert('foo');
+            const clock1 = store.clock.fork(0);
+            store.insert('bar');
+            const clock2 = store.clock.fork(0);
+            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['foo', 'bar'], [+1000001, +2000001]));
+            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], []));
+        },
+        'Put value to the middle'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar').insert('xxx', 1).delta(), $.$hyoo_crowd_delta(['foo', 'xxx', 'bar'], [+1000001, +3000001, +2000001]));
+        },
+        'Put value to the start'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar', 0).delta(), $.$hyoo_crowd_delta(['bar', 'foo'], [+2000001, +1000001]));
+        },
+        'Partial cut values'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar').cut('foo').delta(), $.$hyoo_crowd_delta(['bar', 'foo'], [+2000001, -3000001]));
+        },
+        'Ignore already cutted values'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').cut('foo').cut('foo').delta(), $.$hyoo_crowd_delta(['foo'], [-2000001]));
+        },
+        'Convert to native array'() {
+            const store = new $.$hyoo_crowd_list().fork(1)
+                .insert('foo')
+                .insert('bar', 0)
+                .insert('xxx')
+                .cut('foo');
+            $.$mol_assert_like(store.items(), ["bar", "xxx"]);
+        },
+        'Insert by native array'() {
+            const store = new $.$hyoo_crowd_list().fork(1)
+                .insert('foo')
+                .insert('bar');
+            store.items(['foo', 'xxx', 'bar']);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'xxx', 'bar'], [1000001, 3000001, 2000001]));
+        },
+        'Remove by native array'() {
+            const store = new $.$hyoo_crowd_list().fork(1)
+                .insert('foo')
+                .insert('xxx')
+                .insert('bar');
+            store.items(['foo', 'bar']);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'bar', 'xxx'], [1000001, 3000001, -4000001]));
+        },
+        'Replace by native array'() {
+            const store = new $.$hyoo_crowd_list().fork(1)
+                .insert('foo')
+                .insert('xxx')
+                .insert('bar');
+            store.items(['foo', 'yyy', 'bar']);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'yyy', 'bar', 'xxx'], [1000001, 5000001, 3000001, -4000001]));
+        },
+        'Reorder by native array'() {
+            const store = new $.$hyoo_crowd_list().fork(1)
+                .insert('foo')
+                .insert('xxx')
+                .insert('bar');
+            store.items(['foo', 'bar', 'xxx']);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'bar', 'xxx'], [1000001, 3000001, 5000001]));
+        },
+        'Merge different sequences'() {
+            const left = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
+            const right = new $.$hyoo_crowd_list().fork(2).insert('xxx').insert('yyy');
+            const left_delta = left.delta();
+            const right_delta = right.delta();
+            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['xxx', 'yyy', 'foo', 'bar'], [+1000002, +2000002, +1000001, +2000001]));
+        },
+        'Insert in the same place'() {
+            const base = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
+            const left = base.fork(2).insert('xxx', 1);
+            const right = base.fork(3).insert('yyy', 1);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['foo', 'yyy', 'xxx', 'bar'], [+1000001, +3000003, +3000002, +2000001]));
+        },
+        'Insert after moved'() {
+            const base = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
+            const left = base.fork(2).insert('xxx', 1);
+            const right = base.fork(3).insert('foo', 2);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['xxx', 'bar', 'foo'], [+3000002, +2000001, +3000003]));
+        },
+        'Insert after cutted'() {
+            const base = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
+            const left = base.fork(2).insert('xxx', 1);
+            const right = base.fork(3).cut('foo');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['xxx', 'bar', 'foo'], [+3000002, +2000001, -3000003]));
+        },
+        'Number ids support'() {
+            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert(1).insert(2).insert(3, 1).delta(), $.$hyoo_crowd_delta([1, 3, 2], [+1000001, +3000001, +2000001]));
+        },
+    });
+})($ || ($ = {}));
+//list.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'Default state'() {
+            const store = $.$hyoo_crowd_union.of({
+                counter: $.$hyoo_crowd_numb,
+                string: $.$hyoo_crowd_reg,
+            }).make();
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], []));
+            $.$mol_assert_like(store.type, null);
+            $.$mol_assert_like(store.as('counter'), null);
+            $.$mol_assert_like(store.as('string'), null);
+        },
+        'Change type with default value'() {
+            const store = $.$hyoo_crowd_union.of({
+                counter: $.$hyoo_crowd_numb,
+                string: $.$hyoo_crowd_reg,
+                object: $.$hyoo_crowd_set,
+                array: $.$hyoo_crowd_list,
+            }).make();
+            store.to('counter');
+            $.$mol_assert_like(store.type, 'counter');
+            $.$mol_assert_like(store.as('counter').numb(), 0);
+        },
+        'Change value'() {
+            const store = $.$hyoo_crowd_union.of({
+                counter: $.$hyoo_crowd_numb,
+                string: $.$hyoo_crowd_reg,
+                object: $.$hyoo_crowd_set,
+                array: $.$hyoo_crowd_list,
+            }).make().fork(1);
+            store.to('counter').shift(+5).shift(-2);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['counter', +3], [-1000001, +3000001]));
+        },
+        'Slice after version'() {
+            const store = $.$hyoo_crowd_union.of({
+                counter: $.$hyoo_crowd_numb,
+                string: $.$hyoo_crowd_reg,
+                object: $.$hyoo_crowd_set,
+                array: $.$hyoo_crowd_list,
+            }).make().fork(1);
+            store.to('object').add('foo');
+            const clock1 = store.clock.fork(0);
+            store.to('object').add('bar');
+            const clock2 = store.clock.fork(0);
+            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['object', 'bar'], [-1000001, +3000001]));
+            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], []));
+        },
+        'Reinterpret list as reg'() {
+            const store = $.$hyoo_crowd_union.of({
+                counter: $.$hyoo_crowd_numb,
+                string: $.$hyoo_crowd_reg,
+                object: $.$hyoo_crowd_set,
+                array: $.$hyoo_crowd_list,
+            }).make().fork(1);
+            store.to('string').str('foo');
+            store.to('string').str('bar');
+            $.$mol_assert_like(store.to('array').items(), ['bar']);
+            store.as('array').insert('xxx');
+            $.$mol_assert_like(store.to('string').str(), 'xxx');
+        },
+        'Cross merge list and register'() {
+            const base = $.$hyoo_crowd_union.of({
+                counter: $.$hyoo_crowd_numb,
+                string: $.$hyoo_crowd_reg,
+                object: $.$hyoo_crowd_set,
+                array: $.$hyoo_crowd_list,
+            }).make().fork(1);
+            base.to('string').str('foo');
+            const left = base.fork(2);
+            left.as('string').str('bar');
+            const right = base.fork(3);
+            right.to('array').insert('xxx');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['array', 'bar', 'foo', 'xxx'], [-3000003, +3000002, +2000001, +4000003]));
+        },
+    });
+})($ || ($ = {}));
+//union.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'Register => Tagged Union'() {
+            let left = $.$hyoo_crowd_reg.make().fork(2);
+            left.numb(777);
+            left.numb(123);
+            let right = $.$hyoo_crowd_union.of({
+                index: $.$hyoo_crowd_reg,
+                count: $.$hyoo_crowd_reg,
+            }).make().fork(1);
+            right.apply(left.delta());
+            $.$mol_assert_like(right.type, "index");
+            $.$mol_assert_like(right.as('index').numb(), 123);
+        },
+        'Tagged Union => Register'() {
+            let left = $.$hyoo_crowd_union.of({
+                index: $.$hyoo_crowd_reg,
+                count: $.$hyoo_crowd_reg,
+            }).make().fork(1);
+            left.to('index').numb(777);
+            left.to('count');
+            let right = $.$hyoo_crowd_reg.make().fork(2);
+            right.apply(left.delta());
+            $.$mol_assert_like(right.numb(), 777);
+        },
+        'Tagged Union => Counter'() {
+            let left = $.$hyoo_crowd_union.of({
+                index: $.$hyoo_crowd_reg,
+                count: $.$hyoo_crowd_reg,
+            }).make().fork(1);
+            left.to('index').numb(777);
+            left.to('count');
+            let right = $.$hyoo_crowd_numb.make().fork(2);
+            right.apply(left.delta());
+            $.$mol_assert_like(right.numb(), 777);
+        },
+    });
+})($ || ($ = {}));
+//recast.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'Change dict by different keys'() {
+            const val = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make().fork(1);
+            val.for('foo').insert(666);
+            val.for('bar').insert(777);
+            val.for('foo').insert(888, 0);
+            val.for('bar').cut(777);
+            $.$mol_assert_like(val.delta(), $.$hyoo_crowd_delta(['foo', 888, 666, 'bar', 777], [-2, 3000001, 1000001, -1, -4000001]));
+        },
+        'Slice dict after version'() {
+            const val = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_set }).make().fork(1);
+            val.for('foo').add(1);
+            val.for('bar').add(2);
+            val.for('xxx').add(3);
+            const clock1 = val.clock.fork(0);
+            val.for('foo').add(4);
+            val.for('bar').add(5);
+            val.for('xxx').add(6);
+            const clock2 = val.clock.fork(0);
+            $.$mol_assert_like(val.delta(clock1), $.$hyoo_crowd_delta(['foo', 4, 'bar', 5, 'xxx', 6], [-1, +4000001, -1, +5000001, -1, +6000001]));
+            $.$mol_assert_like(val.delta(clock2), $.$hyoo_crowd_delta([], []));
+        },
+        'Merge different dicts'() {
+            const left = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make().fork(1);
+            left.for('foo').insert(666);
+            left.for('').insert('xxx');
+            const right = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make().fork(2);
+            right.for('foo').insert(777);
+            right.for('bar').insert('yyy');
+            right.for('bar').insert('zzz');
+            const left_delta = left.delta();
+            const right_delta = right.delta();
+            $.$mol_assert_like(left.apply(right_delta).delta(), $.$hyoo_crowd_delta(['foo', 777, 666, '', 'xxx', 'bar', 'yyy', 'zzz'], [-2, 1000002, 1000001, -1, 2000001, -2, 2000002, 3000002]));
+            $.$mol_assert_like(right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['foo', 777, 666, 'bar', 'yyy', 'zzz', '', 'xxx'], [-2, 1000002, 1000001, -2, 2000002, 3000002, -1, 2000001]));
+        },
+        'Merge increases versions in dicts'() {
+            const base = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make();
+            const left = base.fork(1);
+            left.for('foo').insert('xxx');
+            const right = base.fork(2);
+            right.for('bar').insert(17);
+            right.for('bar').insert(18);
+            left.apply(right.delta());
+            left.for('foo').insert('yyy');
+            $.$mol_assert_like(left.delta(), $.$hyoo_crowd_delta(['foo', 'xxx', 'yyy', 'bar', 17, 18], [-2, 1000001, 3000001, -2, 1000002, 2000002]));
+        },
+        'Dictionary of Union'() {
+            const base = $.$hyoo_crowd_dict.of({
+                val: $.$hyoo_crowd_union.of({
+                    string: $.$hyoo_crowd_reg,
+                    array: $.$hyoo_crowd_list,
+                    object: $.$hyoo_crowd_set,
+                })
+            }).make();
+            const left = base.fork(1);
+            const right = base.fork(2);
+            left.for('foo').to('string').str('bar');
+            right.for('foo').to('array').insert('xxx');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['foo', 'array', 'xxx', 'bar'], [-3, -1000002, 2000002, 2000001]));
+        },
+        'Dictionary of Dictionary'() {
+            const base = $.$hyoo_crowd_dict.of({
+                val: $.$hyoo_crowd_dict.of({
+                    val: $.$hyoo_crowd_reg,
+                }),
+            }).make();
+            const left = base.fork(1);
+            const right = base.fork(2);
+            left.for('foo').for('xxx').str('321');
+            right.for('foo').for('yyy').str('123');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like(left.for('foo').for('xxx').str(), right.for('foo').for('xxx').str(), '321');
+            $.$mol_assert_like(left.for('foo').for('yyy').str(), right.for('foo').for('yyy').str(), '123');
+        },
+        'Default tuple state'() {
+            const store = $.$hyoo_crowd_dict.of({
+                keys: $.$hyoo_crowd_list,
+                vals: $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_reg }),
+            }).make();
+            $.$mol_assert_like(store.for('keys').items(), []);
+            $.$mol_assert_like(store.for('vals').for('foo').str(), '');
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], []));
+        },
+        'Changed tuple state'() {
+            const Map = $.$hyoo_crowd_dict.of({
+                vers: $.$hyoo_crowd_numb,
+                keys: $.$hyoo_crowd_set,
+                vals: $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_reg }),
+            });
+            const store = Map.make().fork(1);
+            store.for('keys').add('foo').add('bar');
+            store.for('vals').for('xxx').str('yyy');
+            $.$mol_assert_like(store.for('vers').numb(), 0);
+            $.$mol_assert_like(store.for('keys').items, ['foo', 'bar']);
+            $.$mol_assert_like(store.for('vals').for('xxx').str(), 'yyy');
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['keys', 'foo', 'bar', 'vals', 'xxx', 'yyy'], [-2, +1000001, +2000001, -2, -1, +3000001]));
+        },
+        'Tuple of tuples'() {
+            const Point = $.$hyoo_crowd_dict.of({
+                X: $.$hyoo_crowd_numb,
+                Y: $.$hyoo_crowd_numb,
+            });
+            const Rect = $.$hyoo_crowd_dict.of({
+                TL: Point,
+                BR: Point,
+            });
+            const store = Rect.make().fork(1);
+            store.for('TL').for('X').shift(-2);
+            store.for('TL').for('Y').shift(-3);
+            store.for('BR').for('X').shift(+5);
+            store.for('BR').for('Y').shift(+7);
+            $.$mol_assert_like(store.for('TL').for('X').numb(), -2);
+            $.$mol_assert_like(store.for('TL').for('Y').numb(), -3);
+            $.$mol_assert_like(store.for('BR').for('X').numb(), +5);
+            $.$mol_assert_like(store.for('BR').for('Y').numb(), +7);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(["TL", "X", -2, "Y", -3, "BR", "X", +5, "Y", +7], [-4, -1, +1000001, -1, +2000001, -4, -1, +3000001, -1, +4000001]));
+        },
+    });
+})($ || ($ = {}));
+//dict.test.js.map
 ;
 "use strict";
 //intersect.test.js.map
@@ -9897,35 +11524,187 @@ var $;
 var $;
 (function ($) {
     $.$mol_test({
-        '$mol_syntax2_md_flow'() {
-            const check = (input, right) => {
-                const tokens = [];
-                $.$mol_syntax2_md_flow.tokenize(input, (...token) => tokens.push(token));
-                $.$mol_assert_like(JSON.stringify(tokens), JSON.stringify(right));
-            };
-            check('Hello,\nWorld..\r\n\r\n\nof Love!', [
-                ['block', 'Hello,\nWorld..\r\n\r\n\n', ['Hello,\nWorld..', '\r\n\r\n\n'], 0],
-                ['block', 'of Love!', ['of Love!', ''], 19],
-            ]);
-            check('# Header1\n\nHello!\n\n## Header2', [
-                ['header', '# Header1\n\n', ['#', ' ', 'Header1', '\n\n'], 0],
-                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 11],
-                ['header', '## Header2', ['##', ' ', 'Header2', ''], 19],
-            ]);
-            check('```\nstart()\n```\n\n```js\nrestart()\n```\n\nHello!\n\n```\nstop()\n```', [
-                ['code', '```\nstart()\n```\n\n', ['```', '', 'start()\n', '```', '\n\n'], 0],
-                ['code', '```js\nrestart()\n```\n\n', ['```', 'js', 'restart()\n', '```', '\n\n'], 17],
-                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 38],
-                ['code', '```\nstop()\n```', ['```', '', 'stop()\n', '```', ''], 46],
-            ]);
-            check('| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n| Cell11 | Cell12\n| Cell21 | Cell22\n', [
-                ['table', '| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n', ['| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n', '\n'], 0],
-                ['table', '| Cell11 | Cell12\n| Cell21 | Cell22\n', ['| Cell11 | Cell12\n| Cell21 | Cell22\n', ''], 68],
-            ]);
+        'Default state'() {
+            const store = new $.$hyoo_crowd_text();
+            $.$mol_assert_like(store.text(), '');
+        },
+        'Auto tokenize'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            $.$mol_assert_like(store.tokens.length, 2);
+            $.$mol_assert_like(store.text(), 'foo bar');
+            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +4000001]);
+        },
+        'Replace with same tokens count'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            store.text('xxx yyy');
+            $.$mol_assert_like(store.tokens.length, 2);
+            $.$mol_assert_like(store.text(), 'xxx yyy');
+            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +4000001]);
+        },
+        'Replace with more tokens count'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            store.text('foo de bar');
+            $.$mol_assert_like(store.tokens.length, 3);
+            $.$mol_assert_like(store.text(), 'foo de bar');
+            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +6000001, +4000001]);
+        },
+        'Replace with more tokens count with side changes'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo  bar');
+            store.text('foo de bar');
+            $.$mol_assert_like(store.tokens.length, 3);
+            $.$mol_assert_like(store.text(), 'foo de bar');
+            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +4000001, +6000001]);
+        },
+        'Space doubling'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            store.text('foo  bar');
+            $.$mol_assert_like(store.tokens.length, 3);
+            $.$mol_assert_like(store.text(), 'foo  bar');
+            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +6000001, +4000001]);
+        },
+        'Replace with less tokens count'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo de bar');
+            store.text('foo bar');
+            $.$mol_assert_like(store.tokens.length, 2);
+            $.$mol_assert_like(store.text(), 'foo bar');
+            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +6000001, -7000001]);
+        },
+        'Cut from end'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            store.text('foo');
+            $.$mol_assert_like(store.text(), 'foo');
+            $.$mol_assert_like(store.tokens.length, 1);
+            $.$mol_assert_like(store.root.delta().stamps, [+2000001, -6000001]);
+        },
+        'Concurrent changes'() {
+            const base = new $.$hyoo_crowd_text();
+            base.text('Hello World and fun!');
+            const left = base.fork(1);
+            const right = base.fork(2);
+            left.text('Hello Alice and fun!');
+            right.text('Say: Hello World and fun!');
+            const left_delta = left.delta();
+            const right_delta = right.delta();
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_equal(left.text(), right.text(), 'Say: Hello Alice and fun!');
+        },
+        'Splice inside token'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foobar');
+            store.write('XYZ', 2, 2);
+            $.$mol_assert_like(store.text(), 'foXYZar');
+            $.$mol_assert_like(store.tokens.length, 2);
+        },
+        'Splice over some tokens'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('xxx foo bar yyy');
+            store.write('X Y Z', 6, 3);
+            $.$mol_assert_like(store.text(), 'xxx foX Y Zar yyy');
+            $.$mol_assert_like(store.tokens.length, 6);
+        },
+        'Splice whole token'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('xxx foo yyy');
+            store.write('bar', 4, 4);
+            $.$mol_assert_like(store.text(), 'xxx baryyy');
+            $.$mol_assert_like(store.tokens.length, 2);
+        },
+        'Splice whole text'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            store.write('xxx', 0, 7);
+            $.$mol_assert_like(store.text(), 'xxx');
+            $.$mol_assert_like(store.tokens.length, 1);
+        },
+        'Splice at the end'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo');
+            store.write('xxx', 3);
+            $.$mol_assert_like(store.text(), 'fooxxx');
+            $.$mol_assert_like(store.tokens.length, 1);
+        },
+        'Splice between tokens'() {
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            store.write('xxx', 4);
+            $.$mol_assert_like(store.text(), 'foo xxxbar');
+            $.$mol_assert_like(store.tokens.length, 2);
         },
     });
 })($ || ($ = {}));
-//md.test.js.map
+//text.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'Default data'() {
+            const store = $.$hyoo_crowd_graph.make();
+            $.$mol_assert_equal(store.value('foo'), null);
+            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], []));
+        },
+        'Changed values'() {
+            const store = $.$hyoo_crowd_graph.make();
+            store.value('null', null);
+            store.value('bool', false);
+            store.value('numb', 0);
+            store.value('text', '');
+            store.value('list', ['foo', 'bar']);
+            $.$mol_assert_equal(store.value('null'), null);
+            $.$mol_assert_equal(store.value('bool'), false);
+            $.$mol_assert_equal(store.value('numb'), 0);
+            $.$mol_assert_equal(store.value('text'), '');
+            $.$mol_assert_like(store.value('list'), ['foo', 'bar']);
+        },
+        'Graph representation'() {
+            const store = $.$hyoo_crowd_graph.make();
+            store.edge('A/out', ['B', 'C']);
+            store.edge('B/in', ['A']);
+            store.edge('B/out', ['C']);
+            store.edge('C/in', ['A', 'B']);
+            $.$mol_assert_equal(store.edge(store.edge('A/out')[0] + '/out')[0], 'C');
+        },
+    });
+})($ || ($ = {}));
+//graph.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test_mocks.push(context => {
+        context.$mol_store_local = new $.$mol_store({});
+    });
+})($ || ($ = {}));
+//local.mock.test.js.map
+;
+"use strict";
+var $;
+(function ($_1) {
+    $_1.$mol_test({
+        'get/set/delete'() {
+            var key = '$mol_store_local_test';
+            $_1.$mol_assert_equal($_1.$mol_store_local.value(key), null);
+            $_1.$mol_store_local.value(key, 123);
+            $_1.$mol_assert_equal($_1.$mol_store_local.value(key), 123);
+            $_1.$mol_store_local.value(key, null);
+            $_1.$mol_assert_equal($_1.$mol_store_local.value(key), null);
+        },
+        'mocked'($) {
+            var key = '$mol_store_local_test';
+            $.$mol_store_local.value(key, 321);
+            $_1.$mol_assert_unique($_1.$mol_store_local.value(key), 321);
+        },
+    });
+})($ || ($ = {}));
+//local.test.js.map
 ;
 "use strict";
 var $;
@@ -9960,6 +11739,150 @@ var $;
     });
 })($ || ($ = {}));
 //local.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'decode utf8 string'() {
+            const str = 'Hello, ΧΨΩЫ';
+            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
+            $.$mol_assert_equal($.$mol_charset_decode(encoded), str);
+            $.$mol_assert_equal($.$mol_charset_decode(encoded, 'utf8'), str);
+        },
+        'decode empty string'() {
+            const encoded = new Uint8Array([]);
+            $.$mol_assert_equal($.$mol_charset_decode(encoded), '');
+        },
+    });
+})($ || ($ = {}));
+//decode.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'encode utf8 string'() {
+            const str = 'Hello, ΧΨΩЫ';
+            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
+            $.$mol_assert_like($.$mol_charset_encode(str), encoded);
+        },
+    });
+})($ || ($ = {}));
+//encode.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    class TestClass extends Uint8Array {
+    }
+    $.$mol_test({
+        'Uint8Array vs itself'() {
+            $.$mol_assert_ok($.$mol_compare_array(new Uint8Array, new Uint8Array));
+            $.$mol_assert_ok($.$mol_compare_array(new Uint8Array([0]), new Uint8Array([0])));
+            $.$mol_assert_not($.$mol_compare_array(new Uint8Array([0]), new Uint8Array([1])));
+        },
+        'Uint8Array vs subclassed array'() {
+            $.$mol_assert_not($.$mol_compare_array(new Uint8Array, new TestClass));
+        },
+    });
+})($ || ($ = {}));
+//array.test.js.map
+;
+"use strict";
+var $;
+(function ($_1) {
+    var $$;
+    (function ($$) {
+        $_1.$mol_test({
+            'handle clicks by default'($) {
+                let clicked = false;
+                const clicker = $$.$mol_button.make({
+                    $,
+                    event_click: (event) => { clicked = true; },
+                });
+                const element = clicker.dom_tree();
+                const event = $_1.$mol_dom_context.document.createEvent('mouseevent');
+                event.initEvent('click', true, true);
+                element.dispatchEvent(event);
+                $_1.$mol_assert_ok(clicked);
+            },
+            'no handle clicks if disabled'($) {
+                let clicked = false;
+                const clicker = $$.$mol_button.make({
+                    $,
+                    event_click: (event) => { clicked = true; },
+                    enabled: () => false,
+                });
+                const element = clicker.dom_tree();
+                const event = $_1.$mol_dom_context.document.createEvent('mouseevent');
+                event.initEvent('click', true, true);
+                element.dispatchEvent(event);
+                $_1.$mol_assert_not(clicked);
+            },
+        });
+    })($$ = $_1.$$ || ($_1.$$ = {}));
+})($ || ($ = {}));
+//button.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'all cases of using maybe'() {
+            $.$mol_assert_equal($.$mol_maybe(0)[0], 0);
+            $.$mol_assert_equal($.$mol_maybe(false)[0], false);
+            $.$mol_assert_equal($.$mol_maybe(null)[0], void 0);
+            $.$mol_assert_equal($.$mol_maybe(void 0)[0], void 0);
+            $.$mol_assert_equal($.$mol_maybe(void 0).map(v => v.toString())[0], void 0);
+            $.$mol_assert_equal($.$mol_maybe(0).map(v => v.toString())[0], '0');
+        },
+    });
+})($ || ($ = {}));
+//maybe.test.js.map
+;
+"use strict";
+var $;
+(function ($_1) {
+    $_1.$mol_test_mocks.push($ => {
+        $.$mol_after_work = $_1.$mol_after_mock_timeout;
+    });
+})($ || ($ = {}));
+//work.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        '$mol_syntax2_md_flow'() {
+            const check = (input, right) => {
+                const tokens = [];
+                $.$mol_syntax2_md_flow.tokenize(input, (...token) => tokens.push(token));
+                $.$mol_assert_like(JSON.stringify(tokens), JSON.stringify(right));
+            };
+            check('Hello,\nWorld..\r\n\r\n\nof Love!', [
+                ['block', 'Hello,\nWorld..\r\n\r\n\n', ['Hello,\nWorld..', '\r\n\r\n\n'], 0],
+                ['block', 'of Love!', ['of Love!', ''], 19],
+            ]);
+            check('# Header1\n\nHello!\n\n## Header2', [
+                ['header', '# Header1\n\n', ['#', ' ', 'Header1', '\n\n'], 0],
+                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 11],
+                ['header', '## Header2', ['##', ' ', 'Header2', ''], 19],
+            ]);
+            check('```\nstart()\n```\n\n```js\nrestart()\n```\n\nHello!\n\n```\nstop()\n```', [
+                ['code', '```\nstart()\n```\n\n', ['```', '', 'start()\n', '```', '\n\n'], 0],
+                ['code', '```js\nrestart()\n```\n\n', ['```', 'js', 'restart()\n', '```', '\n\n'], 17],
+                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 38],
+                ['code', '```\nstop()\n```', ['```', '', 'stop()\n', '```', ''], 46],
+            ]);
+            check('| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n| Cell11 | Cell12\n| Cell21 | Cell22\n', [
+                ['table', '| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n', ['| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n', '\n'], 0],
+                ['table', '| Cell11 | Cell12\n| Cell21 | Cell22\n', ['| Cell11 | Cell12\n| Cell21 | Cell22\n', ''], 68],
+            ]);
+        },
+    });
+})($ || ($ = {}));
+//md.test.js.map
 ;
 "use strict";
 var $;
@@ -10086,55 +12009,6 @@ var $;
     });
 })($ || ($ = {}));
 //tree.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'decode utf8 string'() {
-            const str = 'Hello, ΧΨΩЫ';
-            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
-            $.$mol_assert_equal($.$mol_charset_decode(encoded), str);
-            $.$mol_assert_equal($.$mol_charset_decode(encoded, 'utf8'), str);
-        },
-        'decode empty string'() {
-            const encoded = new Uint8Array([]);
-            $.$mol_assert_equal($.$mol_charset_decode(encoded), '');
-        },
-    });
-})($ || ($ = {}));
-//decode.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'encode utf8 string'() {
-            const str = 'Hello, ΧΨΩЫ';
-            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
-            $.$mol_assert_like($.$mol_charset_encode(str), encoded);
-        },
-    });
-})($ || ($ = {}));
-//encode.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class TestClass extends Uint8Array {
-    }
-    $.$mol_test({
-        'Uint8Array vs itself'() {
-            $.$mol_assert_ok($.$mol_compare_array(new Uint8Array, new Uint8Array));
-            $.$mol_assert_ok($.$mol_compare_array(new Uint8Array([0]), new Uint8Array([0])));
-            $.$mol_assert_not($.$mol_compare_array(new Uint8Array([0]), new Uint8Array([1])));
-        },
-        'Uint8Array vs subclassed array'() {
-            $.$mol_assert_not($.$mol_compare_array(new Uint8Array, new TestClass));
-        },
-    });
-})($ || ($ = {}));
-//array.test.js.map
 ;
 "use strict";
 var $;

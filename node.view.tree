@@ -386,10 +386,14 @@ $mol_textarea $mol_view
 			sidebar_showed <= sidebar_showed
 
 $my_wiki $mol_page
-	title \My Wiki
+	Store $mol_store_shared
+	head /
+		<= Title $mol_string
+			hint @ \Title
+			value?val <=> title?val @ \My Wiki
 	body /
 		<= Text $mol_textarea
-			hint \What do you think?
+			hint @ \What do you think?
 			value?val <=> text?val \
 
 $mol_view_tree_test_attributes_super $mol_view
