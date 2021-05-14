@@ -2,8 +2,21 @@ namespace $.$$ {
 	
 	export class $my_wiki extends $.$my_wiki {
 		
+		@ $mol_mem
+		Note( id: string ) {
+			return this.Store().sub( id, new $my_wiki_note )
+		}
+		
+		Wiki() {
+			return this.Note( 'wiki' )
+		}
+		
+		title( next?: string ) {
+			return this.Wiki().title( next ) ?? super.title()
+		}
+		
 		text( next?: string ) {
-			return this.$.$mol_state_local.value( 'text', next ) ?? ''
+			return this.Wiki().text( next ) ?? ''
 		}
 		
 	}
