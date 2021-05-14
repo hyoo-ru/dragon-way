@@ -5079,8 +5079,13 @@ var $;
         autocomplete() {
             return false;
         }
+        auto() {
+            return [
+                this.selection_watcher()
+            ];
+        }
         field() {
-            return Object.assign(Object.assign({}, super.field()), { disabled: this.disabled(), value: this.value_changed(), placeholder: this.hint(), spellcheck: this.spellcheck(), autocomplete: this.autocomplete_native() });
+            return Object.assign(Object.assign({}, super.field()), { disabled: this.disabled(), value: this.value_changed(), placeholder: this.hint(), spellcheck: this.spellcheck(), autocomplete: this.autocomplete_native(), selectionEnd: this.selection_end(), selectionStart: this.selection_start() });
         }
         attr() {
             return Object.assign(Object.assign({}, super.attr()), { maxlength: this.length_max(), type: this.type() });
@@ -5092,6 +5097,9 @@ var $;
             return [
                 this.Submit()
             ];
+        }
+        selection_watcher() {
+            return null;
         }
         disabled() {
             return false;
@@ -5112,6 +5120,16 @@ var $;
         }
         autocomplete_native() {
             return "";
+        }
+        selection_end(val) {
+            if (val !== undefined)
+                return val;
+            return 0;
+        }
+        selection_start(val) {
+            if (val !== undefined)
+                return val;
+            return 0;
         }
         length_max() {
             return Infinity;
@@ -5147,6 +5165,12 @@ var $;
     __decorate([
         $.$mol_mem
     ], $mol_string.prototype, "value", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_string.prototype, "selection_end", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_string.prototype, "selection_start", null);
     __decorate([
         $.$mol_mem
     ], $mol_string.prototype, "type", null);
@@ -5190,7 +5214,18 @@ var $;
             autocomplete_native() {
                 return this.autocomplete() ? 'on' : 'off';
             }
+            selection_watcher() {
+                return new $.$mol_dom_listener(this.$.$mol_dom_context.document, 'selectionchange', event => this.selection_change(event));
+            }
+            selection_change(event) {
+                const el = this.dom_node();
+                this.selection_start(el.selectionStart);
+                this.selection_end(el.selectionEnd);
+            }
         }
+        __decorate([
+            $.$mol_mem
+        ], $mol_string.prototype, "selection_watcher", null);
         $$.$mol_string = $mol_string;
     })($$ = $.$$ || ($.$$ = {}));
 })($ || ($ = {}));
