@@ -4,23 +4,27 @@ namespace $.$$ {
 		
 		@ $mol_mem_key
 		Note( id: string ) {
-			return this.Store().sub( id, new $my_wiki_note )
+			return this.Store().sub( 'note=' + id, new $my_wiki_note )
 		}
 		
-		Wiki() {
-			return this.Note( 'wiki' )
+		note_id() {
+			return this.$.$mol_state_arg.value( 'note' ) ?? ''
+		}
+		
+		Note_current() {
+			return this.Note( this.note_id() )
 		}
 		
 		title( next?: string ) {
-			return this.Wiki().title( next ) ?? super.title()
+			return this.Note_current().title( next ) ?? super.title()
 		}
 		
 		text( next?: string ) {
-			return this.Wiki().text( next ) ?? ''
+			return this.Note_current().text( next ) ?? ''
 		}
 		
 		text_selection( next?: number[] ) {
-			return this.Wiki().selection( 'text', next )
+			return this.Note_current().selection( 'text', next )
 		}
 		
 	}
