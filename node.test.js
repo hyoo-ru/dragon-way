@@ -7387,7 +7387,7 @@ var $;
     $.$mol_syntax2_md_code = new $.$mol_syntax2({
         'code-docs': /\/\/\/.*?$/,
         'code-comment-block': /(?:\/\*[^]*?\*\/|\/\+[^]*?\+\/|<![^]*?>)/,
-        'code-link': /\w+:\S+?(?=\s|\\\\|""|$)/,
+        'code-link': /(?:\w+:|#|\?|\/)\S+?(?=\s|\\\\|""|$)/,
         'code-comment-inline': /\/\/.*?$/,
         'code-string': /(?:".*?"|'.*?'|`.*?`|\/.+?\/[gmi]*\b|(?:^|[ \t])\\[^\n]*\n)/,
         'code-number': /[+-]?(?:\d*\.)?\d+\w*/,
@@ -8203,21 +8203,25 @@ var $;
     (function ($$) {
         class $my_wiki extends $.$my_wiki {
             Note(id) {
-                return this.Store().sub(id, new $$.$my_wiki_note);
+                return this.Store().sub('note=' + id, new $$.$my_wiki_note);
             }
-            Wiki() {
-                return this.Note('wiki');
+            note_id() {
+                var _a;
+                return (_a = this.$.$mol_state_arg.value('note')) !== null && _a !== void 0 ? _a : '';
+            }
+            Note_current() {
+                return this.Note(this.note_id());
             }
             title(next) {
                 var _a;
-                return (_a = this.Wiki().title(next)) !== null && _a !== void 0 ? _a : super.title();
+                return (_a = this.Note_current().title(next)) !== null && _a !== void 0 ? _a : super.title();
             }
             text(next) {
                 var _a;
-                return (_a = this.Wiki().text(next)) !== null && _a !== void 0 ? _a : '';
+                return (_a = this.Note_current().text(next)) !== null && _a !== void 0 ? _a : '';
             }
             text_selection(next) {
-                return this.Wiki().selection('text', next);
+                return this.Note_current().selection('text', next);
             }
         }
         __decorate([

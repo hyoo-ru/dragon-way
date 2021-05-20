@@ -3002,7 +3002,8 @@ declare namespace $ {
 declare namespace $.$$ {
     class $my_wiki extends $.$my_wiki {
         Note(id: string): $my_wiki_note;
-        Wiki(): $my_wiki_note;
+        note_id(): string;
+        Note_current(): $my_wiki_note;
         title(next?: string): string;
         text(next?: string): string;
         text_selection(next?: number[]): number[];
