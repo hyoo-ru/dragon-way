@@ -2963,16 +2963,16 @@ declare namespace $ {
         title(val?: any): any;
         Title(): $$.$mol_string;
         text(val?: any): any;
+        text_selection(val?: any): any;
         Text(): $$.$mol_textarea;
     }
 }
 
 declare namespace $.$$ {
-    type $my_wiki_note_data = {
+    class $my_wiki_note extends $mol_store<{
         title: string;
         text: string;
-    };
-    class $my_wiki_note extends $mol_store<$my_wiki_note_data> {
+    }> {
         title(next?: string): string;
         text(next?: string): string;
     }
@@ -2987,6 +2987,7 @@ declare namespace $.$$ {
         Wiki(): $my_wiki_note;
         title(next?: string): string;
         text(next?: string): string;
+        text_selection(next?: number[]): number[];
     }
 }
 

@@ -8131,10 +8131,16 @@ var $;
                 return val;
             return "";
         }
+        text_selection(val) {
+            if (val !== undefined)
+                return val;
+            return [];
+        }
         Text() {
             const obj = new this.$.$mol_textarea();
             obj.hint = () => this.$.$mol_locale.text('$my_wiki_Text_hint');
             obj.value = (val) => this.text(val);
+            obj.selection = (val) => this.text_selection(val);
             return obj;
         }
     }
@@ -8150,6 +8156,9 @@ var $;
     __decorate([
         $.$mol_mem
     ], $my_wiki.prototype, "text", null);
+    __decorate([
+        $.$mol_mem
+    ], $my_wiki.prototype, "text_selection", null);
     __decorate([
         $.$mol_mem
     ], $my_wiki.prototype, "Text", null);
@@ -8207,9 +8216,12 @@ var $;
                 var _a;
                 return (_a = this.Wiki().text(next)) !== null && _a !== void 0 ? _a : '';
             }
+            text_selection(next) {
+                return this.Wiki().selection('text', next);
+            }
         }
         __decorate([
-            $.$mol_mem
+            $.$mol_mem_key
         ], $my_wiki.prototype, "Note", null);
         $$.$my_wiki = $my_wiki;
     })($$ = $.$$ || ($.$$ = {}));
