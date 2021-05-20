@@ -8,3 +8,4 @@ $my_wiki $mol_page
 		<= Text $mol_textarea
 			hint @ \What do you think?
 			value?val <=> text?val \
+			selection?val <=> text_selection?val /number

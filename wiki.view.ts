@@ -2,7 +2,7 @@ namespace $.$$ {
 	
 	export class $my_wiki extends $.$my_wiki {
 		
-		@ $mol_mem
+		@ $mol_mem_key
 		Note( id: string ) {
 			return this.Store().sub( id, new $my_wiki_note )
 		}
@@ -17,6 +17,10 @@ namespace $.$$ {
 		
 		text( next?: string ) {
 			return this.Wiki().text( next ) ?? ''
+		}
+		
+		text_selection( next?: number[] ) {
+			return this.Wiki().selection( 'text', next )
 		}
 		
 	}

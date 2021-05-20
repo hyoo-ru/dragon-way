@@ -1,8 +1,9 @@
 namespace $.$$ {
 	
-	export type $my_wiki_note_data = { title: string, text: string }
-	
-	export class $my_wiki_note extends $mol_store< $my_wiki_note_data > {
+	export class $my_wiki_note extends $mol_store<{
+		title: string
+		text: string
+	}> {
 		
 		title( next?: string ) {
 			return this.value( 'title', next )
