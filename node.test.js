@@ -3462,6 +3462,9 @@ var $;
             this.data(Object.assign(new Constr, data, { [key]: next }));
             return next;
         }
+        selection(key, next = [0, 0]) {
+            return next;
+        }
         sub(key, lens) {
             if (!lens)
                 lens = new $mol_store();
@@ -3485,6 +3488,9 @@ var $;
     __decorate([
         $.$mol_mem
     ], $mol_store.prototype, "data", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store.prototype, "selection", null);
     $.$mol_store = $mol_store;
 })($ || ($ = {}));
 //store.js.map
@@ -4162,6 +4168,25 @@ var $;
                 return next;
             }
         }
+        point_by_offset(offset) {
+            for (const token of this.tokens) {
+                const len = this.value_of(token).length;
+                if (offset < len)
+                    return [token, offset];
+                else
+                    offset -= len;
+            }
+            return [0, 0];
+        }
+        offset_by_point(point) {
+            let offset = 0;
+            for (const token of this.tokens) {
+                if (token === point[0])
+                    return offset + point[1];
+                offset += this.value_of(token).length;
+            }
+            return offset;
+        }
         splice_line(id, from, to, text) {
             var _a, _b;
             const flow = this.for('flow').for(id);
@@ -4374,6 +4399,27 @@ var $;
                 return val;
             }
         }
+        selection(key, next) {
+            let [prefix, ...tail] = key.split('/');
+            let suffix = tail.join('/');
+            if (!suffix) {
+                suffix = prefix;
+                prefix = '';
+            }
+            const store = this.store(prefix);
+            const text = store.for(suffix).to('text');
+            this.value(key);
+            if (next) {
+                this.selection_range(key, next.map(offset => text.point_by_offset(offset)));
+                return next;
+            }
+            else {
+                return this.selection_range(key).map(point => text.offset_by_point(point));
+            }
+        }
+        selection_range(key, next) {
+            return next !== null && next !== void 0 ? next : [[0, 0], [0, 0]];
+        }
         sub(key, lens) {
             const lens2 = super.sub(key, lens);
             lens2.sub = (prefix, lens) => {
@@ -4384,6 +4430,9 @@ var $;
             lens2.value = (suffix, next) => {
                 var _a;
                 return (_a = this.value(key ? key + '/' + suffix : String(suffix), next)) !== null && _a !== void 0 ? _a : (lens2.data_default && lens2.data_default[suffix]);
+            };
+            lens2.selection = (suffix, next) => {
+                return this.selection(key ? key + '/' + suffix : String(suffix), next);
             };
             return lens2;
         }
@@ -4435,6 +4484,12 @@ var $;
     __decorate([
         $.$mol_mem_key
     ], $mol_store_shared.prototype, "value", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_shared.prototype, "selection", null);
+    __decorate([
+        $.$mol_mem_key
+    ], $mol_store_shared.prototype, "selection_range", null);
     __decorate([
         $.$mol_mem_key
     ], $mol_store_shared.prototype, "sub", null);
@@ -5138,6 +5193,11 @@ var $;
         autocomplete() {
             return false;
         }
+        selection(val) {
+            if (val !== undefined)
+                return val;
+            return [];
+        }
         auto() {
             return [
                 this.selection_watcher()
@@ -5197,14 +5257,10 @@ var $;
         autocomplete_native() {
             return "";
         }
-        selection_end(val) {
-            if (val !== undefined)
-                return val;
+        selection_end() {
             return 0;
         }
-        selection_start(val) {
-            if (val !== undefined)
-                return val;
+        selection_start() {
             return 0;
         }
         length_max() {
@@ -5240,13 +5296,10 @@ var $;
     }
     __decorate([
         $.$mol_mem
+    ], $mol_string.prototype, "selection", null);
+    __decorate([
+        $.$mol_mem
     ], $mol_string.prototype, "value", null);
-    __decorate([
-        $.$mol_mem
-    ], $mol_string.prototype, "selection_end", null);
-    __decorate([
-        $.$mol_mem
-    ], $mol_string.prototype, "selection_start", null);
     __decorate([
         $.$mol_mem
     ], $mol_string.prototype, "type", null);
@@ -5296,8 +5349,16 @@ var $;
             }
             selection_change(event) {
                 const el = this.dom_node();
-                this.selection_start(el.selectionStart);
-                this.selection_end(el.selectionEnd);
+                this.selection([
+                    el.selectionStart,
+                    el.selectionEnd,
+                ]);
+            }
+            selection_start() {
+                return this.selection()[0];
+            }
+            selection_end() {
+                return this.selection()[1];
             }
         }
         __decorate([
@@ -7942,6 +8003,11 @@ var $;
         length_max() {
             return Infinity;
         }
+        selection(val) {
+            if (val !== undefined)
+                return val;
+            return [];
+        }
         Edit() {
             const obj = new this.$.$mol_string();
             obj.dom_name = () => "textarea";
@@ -7949,6 +8015,7 @@ var $;
             obj.hint = () => this.hint();
             obj.enabled = () => this.enabled();
             obj.length_max = () => this.length_max();
+            obj.selection = (val) => this.selection(val);
             return obj;
         }
         row_numb(index) {
@@ -7975,6 +8042,9 @@ var $;
     __decorate([
         $.$mol_mem
     ], $mol_textarea.prototype, "value", null);
+    __decorate([
+        $.$mol_mem
+    ], $mol_textarea.prototype, "selection", null);
     __decorate([
         $.$mol_mem
     ], $mol_textarea.prototype, "Edit", null);
@@ -11884,6 +11954,20 @@ var $;
             store.write('xxx', 4);
             $.$mol_assert_like(store.text(), 'foo xxxbar');
             $.$mol_assert_like(store.tokens.length, 2);
+        },
+        'Offset <=> path'() {
+            const obj = { foo: 1, bar: 2 };
+            const { foo, ...restObjectItems } = obj;
+            const store = new $.$hyoo_crowd_text().fork(1);
+            store.text('foo bar');
+            $.$mol_assert_like(store.point_by_offset(0), [store.tokens[0], 0]);
+            $.$mol_assert_like(store.offset_by_point([store.tokens[0], 0]), 0);
+            $.$mol_assert_like(store.point_by_offset(4), [store.tokens[1], 0]);
+            $.$mol_assert_like(store.offset_by_point([store.tokens[1], 0]), 4);
+            $.$mol_assert_like(store.point_by_offset(6), [store.tokens[1], 2]);
+            $.$mol_assert_like(store.offset_by_point([store.tokens[1], 2]), 6);
+            $.$mol_assert_like(store.point_by_offset(7), [0, 0]);
+            $.$mol_assert_like(store.offset_by_point([0, 0]), 7);
         },
     });
 })($ || ($ = {}));
