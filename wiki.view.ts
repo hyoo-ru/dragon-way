@@ -19,6 +19,10 @@ namespace $.$$ {
 			return this.Wiki().text( next ) ?? ''
 		}
 		
+		text_selection( next?: number[] ) {
+			return this.Wiki().selection( 'text', next )
+		}
+		
 	}
 	
 }
