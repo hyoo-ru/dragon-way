@@ -1,18 +1,26 @@
 namespace $.$$ {
 	
 	export class $my_wiki_note extends $mol_store<{
-		title: string
-		text: string
+		details: string
+		changed_moment: string
 	}> {
 		
-		title( next?: string ) {
-			return this.value( 'title', next )
-				?? this.text()?.replace( /\n[\s\S]*/, '' )
-				?? null
+		details( next?: string ) {
+			
+			if( next !== undefined ) {
+				this.changed_moment( new $mol_time_moment )
+			}
+			
+			return this.value( 'details', next ) ?? ''
 		}
 		
-		text( next?: string ) {
-			return this.value( 'text', next )
+		details_selection( next?: number[] ) {
+			return this.selection( 'details', next )
+		}
+		
+		changed_moment( next?: $mol_time_moment ) {
+			const str = this.value( 'changed_moment', next && next.toString() )
+			return str ? new $mol_time_moment( str ) : null
 		}
 		
 	}
