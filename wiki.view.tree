@@ -1,11 +1,12 @@
 $my_wiki $mol_page
 	Store $mol_store_shared
-	head /
-		<= Title $mol_string
-			hint @ \Title
-			value?val <=> title?val @ \My Wiki
+	Note!id $my_wiki_note
+	title \My Wiki
+	tools /
+		<= Changed_moment $mol_date
+			value_moment <= changed_moment $mol_time_moment
 	body /
-		<= Text $mol_textarea
-			hint @ \What do you think?
-			value?val <=> text?val \
-			selection?val <=> text_selection?val /number
+		<= Details $mol_textarea
+			hint \Details
+			value?val <=> details?val \
+			selection?val <=> details_selection?val /number
