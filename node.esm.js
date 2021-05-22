@@ -9706,6 +9706,7 @@ var $;
 (function ($) {
     var $$;
     (function ($$) {
+        $.$mol_dom_context.localStorage.clear();
         class $my_wiki extends $.$my_wiki {
             Note(id) {
                 return this.Store().sub('note=' + id, super.Note(id));
