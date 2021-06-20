@@ -1977,6 +1977,7 @@ declare namespace $ {
             destructor: () => void;
         };
         socket(): WebSocket;
+        scheduled_enforcer(next?: null): $mol_after_timeout;
         send(key: string, next?: any): void;
     }
 }
