@@ -4331,7 +4331,7 @@ var $;
             return `wss://sync-hyoo-ru.herokuapp.com/`;
         }
         heartbeat() {
-            const timer = this.$.setInterval(() => {
+            const timer = setInterval(() => {
                 this.socket().send('');
             }, 30000);
             return {
