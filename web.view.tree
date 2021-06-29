@@ -185,8 +185,6 @@ $mol_list $mol_view
 		0
 		0
 
-$mol_row $mol_view
-
 $mol_hor $mol_view
 
 $mol_calendar $mol_list
