@@ -1,6 +1,6 @@
 $my_wiki $mol_page
-	Store $mol_store_shared
-	Note!id $my_wiki_note
+	state $mol_state_shared
+	note!id $my_wiki_note
 	title \My Wiki
 	tools /
 		<= Changed_moment $mol_date

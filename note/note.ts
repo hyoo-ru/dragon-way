@@ -1,9 +1,10 @@
 namespace $.$$ {
 	
-	export class $my_wiki_note extends $mol_store<{
-		details: string
-		changed_moment: string
-	}> {
+	export class $my_wiki_note extends $mol_object2 {
+		
+		state() {
+			return null as any as $mol_state_shared
+		}
 		
 		details( next?: string ) {
 			
@@ -11,15 +12,15 @@ namespace $.$$ {
 				this.changed_moment( new $mol_time_moment )
 			}
 			
-			return this.value( 'details', next ) ?? ''
+			return this.state().sub( 'details' ).text( next )
 		}
 		
 		details_selection( next?: number[] ) {
-			return this.selection( 'details', next )
+			return this.state().sub( 'details' ).selection( next )
 		}
 		
 		changed_moment( next?: $mol_time_moment ) {
-			const str = this.value( 'changed_moment', next && next.toString() )
+			const str = this.state().sub( 'changed_moment' ).value( next && next.toString() ) as string
 			return str ? new $mol_time_moment( str ) : null
 		}
 		
