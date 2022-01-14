@@ -1,6 +1,6 @@
 namespace $.$$ {
 	
-	$mol_dom_context.localStorage.clear()
+	$mol_dom_context.localStorage?.clear()
 	
 	export class $my_wiki extends $.$my_wiki {
 		
