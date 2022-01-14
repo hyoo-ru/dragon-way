@@ -1,7 +1,5 @@
 namespace $.$$ {
 	
-	$mol_dom_context.localStorage?.clear()
-	
 	export class $my_wiki extends $.$my_wiki {
 		
 		@ $mol_mem_key
