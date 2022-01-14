@@ -21,9 +21,9 @@ var $;
                 await mock(context);
             await test(context);
         }
-        $_1.$mol_ambient({}).$mol_log3_done({
+        $_1.$$.$mol_log3_done({
             place: '$mol_test',
-            message: 'Completed',
+            message: 'All tests passed',
             count: $_1.$mol_test_all.length,
         });
     }
@@ -33,9 +33,14 @@ var $;
         if (scheduled)
             return;
         scheduled = true;
-        setTimeout(() => {
+        setTimeout(async () => {
             scheduled = false;
-            $mol_test_run();
+            try {
+                await $mol_test_run();
+            }
+            finally {
+                $_1.$$.$mol_test_complete();
+            }
         }, 0);
     }
     $_1.$mol_test_schedule = $mol_test_schedule;
@@ -81,6 +86,15 @@ var $;
 //test.test.js.map
 ;
 "use strict";
+var $;
+(function ($) {
+    function $mol_test_complete() {
+    }
+    $.$mol_test_complete = $mol_test_complete;
+})($ || ($ = {}));
+//test.web.test.js.map
+;
+"use strict";
 //assert.test.js.map
 ;
 "use strict";
@@ -88,9 +102,6 @@ var $;
 ;
 "use strict";
 //deep.test.js.map
-;
-"use strict";
-//deep.js.map
 ;
 "use strict";
 var $;
@@ -161,78 +172,6 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    $.$mol_jsx_prefix = '';
-    $.$mol_jsx_booked = null;
-    $.$mol_jsx_document = {
-        getElementById: () => null,
-        createElement: (name) => $.$mol_dom_context.document.createElement(name)
-    };
-    function $mol_jsx(Elem, props, ...childNodes) {
-        const id = props && props.id || '';
-        if ($.$mol_jsx_booked) {
-            if ($.$mol_jsx_booked.has(id)) {
-                $.$mol_fail(new Error(`JSX already has tag with id ${JSON.stringify(id)}`));
-            }
-            else {
-                $.$mol_jsx_booked.add(id);
-            }
-        }
-        const guid = $.$mol_jsx_prefix + id;
-        let node = guid && $.$mol_jsx_document.getElementById(guid);
-        if (typeof Elem !== 'string') {
-            if ('prototype' in Elem) {
-                const view = node && node[Elem] || new Elem;
-                Object.assign(view, props);
-                view[Symbol.toStringTag] = guid;
-                view.childNodes = childNodes;
-                if (!view.ownerDocument)
-                    view.ownerDocument = $.$mol_jsx_document;
-                node = view.valueOf();
-                node[Elem] = view;
-                return node;
-            }
-            else {
-                const prefix = $.$mol_jsx_prefix;
-                const booked = $.$mol_jsx_booked;
-                try {
-                    $.$mol_jsx_prefix = guid;
-                    $.$mol_jsx_booked = new Set;
-                    return Elem(props, ...childNodes);
-                }
-                finally {
-                    $.$mol_jsx_prefix = prefix;
-                    $.$mol_jsx_booked = booked;
-                }
-            }
-        }
-        if (!node)
-            node = $.$mol_jsx_document.createElement(Elem);
-        $.$mol_dom_render_children(node, [].concat(...childNodes));
-        for (const key in props) {
-            if (typeof props[key] === 'string') {
-                node.setAttribute(key, props[key]);
-            }
-            else if (props[key] &&
-                typeof props[key] === 'object' &&
-                Reflect.getPrototypeOf(props[key]) === Reflect.getPrototypeOf({})) {
-                if (typeof node[key] === 'object') {
-                    Object.assign(node[key], props[key]);
-                    continue;
-                }
-            }
-            node[key] = props[key];
-        }
-        if (guid)
-            node.id = guid;
-        return node;
-    }
-    $.$mol_jsx = $mol_jsx;
-})($ || ($ = {}));
-//jsx.js.map
-;
-"use strict";
-var $;
-(function ($) {
     $.$mol_test({
         'nulls & undefineds'() {
             $.$mol_assert_ok($.$mol_compare_deep(null, null));
@@ -244,23 +183,16 @@ var $;
             $.$mol_assert_ok($.$mol_compare_deep(1, 1));
             $.$mol_assert_ok($.$mol_compare_deep(Number.NaN, Number.NaN));
             $.$mol_assert_not($.$mol_compare_deep(1, 2));
-        },
-        'Number'() {
             $.$mol_assert_ok($.$mol_compare_deep(Object(1), Object(1)));
-            $.$mol_assert_ok($.$mol_compare_deep(Object(Number.NaN), Object(Number.NaN)));
             $.$mol_assert_not($.$mol_compare_deep(Object(1), Object(2)));
         },
-        'empty POJOs'() {
+        'POJO'() {
             $.$mol_assert_ok($.$mol_compare_deep({}, {}));
-        },
-        'different POJOs'() {
             $.$mol_assert_not($.$mol_compare_deep({ a: 1 }, { b: 2 }));
-        },
-        'different POJOs with same keys but different values'() {
             $.$mol_assert_not($.$mol_compare_deep({ a: 1 }, { a: 2 }));
-        },
-        'different POJOs with different keys but same values'() {
             $.$mol_assert_not($.$mol_compare_deep({}, { a: undefined }));
+            $.$mol_assert_ok($.$mol_compare_deep({ a: 1, b: 2 }, { b: 2, a: 1 }));
+            $.$mol_assert_ok($.$mol_compare_deep({ a: { b: 1 } }, { a: { b: 1 } }));
         },
         'Array'() {
             $.$mol_assert_ok($.$mol_compare_deep([], []));
@@ -268,19 +200,12 @@ var $;
             $.$mol_assert_not($.$mol_compare_deep([1, 2], [1, 3]));
             $.$mol_assert_not($.$mol_compare_deep([1, 2,], [1, 3, undefined]));
         },
-        'same POJO trees'() {
-            $.$mol_assert_ok($.$mol_compare_deep({ a: { b: 1 } }, { a: { b: 1 } }));
-        },
-        'different classes with same values'() {
-            class Obj {
-                constructor() {
-                    this.foo = 1;
-                }
+        'Non POJO are different'() {
+            class Thing extends Object {
             }
-            const a = new Obj;
-            const b = new class extends Obj {
-            };
-            $.$mol_assert_not($.$mol_compare_deep(a, b));
+            $.$mol_assert_not($.$mol_compare_deep(new Thing, new Thing));
+            $.$mol_assert_not($.$mol_compare_deep(() => 1, () => 1));
+            $.$mol_assert_not($.$mol_compare_deep(new RangeError('Test error'), new RangeError('Test error')));
         },
         'same POJOs with cyclic reference'() {
             const a = { foo: {} };
@@ -288,41 +213,6 @@ var $;
             const b = { foo: {} };
             b['self'] = b;
             $.$mol_assert_ok($.$mol_compare_deep(a, b));
-        },
-        'empty Element'() {
-            $.$mol_assert_ok($.$mol_compare_deep($.$mol_jsx("div", null), $.$mol_jsx("div", null)));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", null), $.$mol_jsx("span", null)));
-        },
-        'Element with attributes'() {
-            $.$mol_assert_ok($.$mol_compare_deep($.$mol_jsx("div", { dir: "rtl" }), $.$mol_jsx("div", { dir: "rtl" })));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", { dir: "rtl" }), $.$mol_jsx("div", null)));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", { dir: "rtl" }), $.$mol_jsx("div", { dir: "ltr" })));
-        },
-        'Element with styles'() {
-            $.$mol_assert_ok($.$mol_compare_deep($.$mol_jsx("div", { style: { color: 'red' } }), $.$mol_jsx("div", { style: { color: 'red' } })));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", { style: { color: 'red' } }), $.$mol_jsx("div", { style: {} })));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", { style: { color: 'red' } }), $.$mol_jsx("div", { style: { color: 'blue' } })));
-        },
-        'Element with content'() {
-            $.$mol_assert_ok($.$mol_compare_deep($.$mol_jsx("div", null,
-                "foo",
-                $.$mol_jsx("br", null)), $.$mol_jsx("div", null,
-                "foo",
-                $.$mol_jsx("br", null))));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", null,
-                "foo",
-                $.$mol_jsx("br", null)), $.$mol_jsx("div", null,
-                "bar",
-                $.$mol_jsx("br", null))));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", null,
-                "foo",
-                $.$mol_jsx("br", null)), $.$mol_jsx("div", null,
-                "foo",
-                $.$mol_jsx("hr", null))));
-        },
-        'Element with handlers'() {
-            $.$mol_assert_ok($.$mol_compare_deep($.$mol_jsx("div", { onclick: () => 1 }), $.$mol_jsx("div", { onclick: () => 1 })));
-            $.$mol_assert_not($.$mol_compare_deep($.$mol_jsx("div", { onclick: () => 1 }), $.$mol_jsx("div", { onclick: () => 2 })));
         },
         'Date'() {
             $.$mol_assert_ok($.$mol_compare_deep(new Date(12345), new Date(12345)));
@@ -335,8 +225,9 @@ var $;
         },
         'Map'() {
             $.$mol_assert_ok($.$mol_compare_deep(new Map, new Map));
-            $.$mol_assert_ok($.$mol_compare_deep(new Map([[[1], [2]]]), new Map([[[1], [2]]])));
+            $.$mol_assert_ok($.$mol_compare_deep(new Map([[1, [2]]]), new Map([[1, [2]]])));
             $.$mol_assert_not($.$mol_compare_deep(new Map([[1, 2]]), new Map([[1, 3]])));
+            $.$mol_assert_not($.$mol_compare_deep(new Map([[[1], 2]]), new Map([[[1], 2]])));
         },
         'Set'() {
             $.$mol_assert_ok($.$mol_compare_deep(new Set, new Set));
@@ -348,6 +239,21 @@ var $;
             $.$mol_assert_ok($.$mol_compare_deep(new Uint8Array([0]), new Uint8Array([0])));
             $.$mol_assert_not($.$mol_compare_deep(new Uint8Array([0]), new Uint8Array([1])));
         },
+        'Custom comparator'() {
+            class User {
+                name;
+                rand;
+                constructor(name, rand = Math.random()) {
+                    this.name = name;
+                    this.rand = rand;
+                }
+                [Symbol.toPrimitive](mode) {
+                    return this.name;
+                }
+            }
+            $.$mol_assert_ok($.$mol_compare_deep(new User('Jin'), new User('Jin')));
+            $.$mol_assert_not($.$mol_compare_deep(new User('Jin'), new User('John')));
+        },
     });
 })($ || ($ = {}));
 //deep.test.js.map
@@ -355,99 +261,13 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    const a_stack = [];
-    const b_stack = [];
-    let cache = null;
-    function $mol_compare_deep(a, b) {
-        if (Object.is(a, b))
-            return true;
-        const a_type = typeof a;
-        const b_type = typeof b;
-        if (a_type !== b_type)
-            return false;
-        if (a_type === 'function')
-            return a['toString']() === b['toString']();
-        if (a_type !== 'object')
-            return false;
-        if (!a || !b)
-            return false;
-        if (a instanceof Error)
-            return false;
-        if (a['constructor'] !== b['constructor'])
-            return false;
-        if (a instanceof RegExp)
-            return a.toString() === b['toString']();
-        const ref = a_stack.indexOf(a);
-        if (ref >= 0) {
-            return Object.is(b_stack[ref], b);
-        }
-        if (!cache)
-            cache = new WeakMap;
-        let a_cache = cache.get(a);
-        if (a_cache) {
-            const b_cache = a_cache.get(b);
-            if (typeof b_cache === 'boolean')
-                return b_cache;
-        }
-        else {
-            a_cache = new WeakMap();
-            cache.set(a, a_cache);
-        }
-        a_stack.push(a);
-        b_stack.push(b);
-        let result;
-        try {
-            if (Symbol.iterator in a) {
-                const a_iter = a[Symbol.iterator]();
-                const b_iter = b[Symbol.iterator]();
-                while (true) {
-                    const a_next = a_iter.next();
-                    const b_next = b_iter.next();
-                    if (a_next.done !== b_next.done)
-                        return result = false;
-                    if (a_next.done)
-                        break;
-                    if (!$mol_compare_deep(a_next.value, b_next.value))
-                        return result = false;
-                }
-                return result = true;
-            }
-            let count = 0;
-            for (let key in a) {
-                try {
-                    if (!$mol_compare_deep(a[key], b[key]))
-                        return result = false;
-                }
-                catch (error) {
-                    $.$mol_fail_hidden(new $.$mol_error_mix(`Failed ${JSON.stringify(key)} fields comparison of ${a} and ${b}`, error));
-                }
-                ++count;
-            }
-            for (let key in b) {
-                --count;
-                if (count < 0)
-                    return result = false;
-            }
-            if (a instanceof Number || a instanceof String || a instanceof Symbol || a instanceof Boolean || a instanceof Date) {
-                if (!Object.is(a['valueOf'](), b['valueOf']()))
-                    return result = false;
-            }
-            return result = true;
-        }
-        finally {
-            a_stack.pop();
-            b_stack.pop();
-            if (a_stack.length === 0) {
-                cache = null;
-            }
-            else {
-                a_cache.set(b, result);
-            }
-        }
+    function $mol_dom_serialize(node) {
+        const serializer = new $.$mol_dom_context.XMLSerializer;
+        return serializer.serializeToString(node);
     }
-    $.$mol_compare_deep = $mol_compare_deep;
+    $.$mol_dom_serialize = $mol_dom_serialize;
 })($ || ($ = {}));
-//deep.js.map
+//serialize.js.map
 ;
 "use strict";
 var $;
@@ -568,6 +388,10 @@ var $;
         }
     }
     $.$mol_assert_like = $mol_assert_like;
+    function $mol_assert_dom(left, right) {
+        $mol_assert_equal($.$mol_dom_serialize(left), $.$mol_dom_serialize(right));
+    }
+    $.$mol_assert_dom = $mol_assert_dom;
 })($ || ($ = {}));
 //assert.js.map
 ;
@@ -648,11 +472,13 @@ var $;
     }
     $.$mol_after_mock_warp = $mol_after_mock_warp;
     class $mol_after_mock_commmon extends $.$mol_object2 {
+        task;
+        promise = Promise.resolve();
+        cancelled = false;
+        id;
         constructor(task) {
             super();
             this.task = task;
-            this.promise = Promise.resolve();
-            this.cancelled = false;
             $.$mol_after_mock_queue.push(task);
         }
         destructor() {
@@ -663,6 +489,7 @@ var $;
     }
     $.$mol_after_mock_commmon = $mol_after_mock_commmon;
     class $mol_after_mock_timeout extends $mol_after_mock_commmon {
+        delay;
         constructor(delay, task) {
             super(task);
             this.delay = delay;
@@ -699,6 +526,9 @@ var $;
     });
 })($ || ($ = {}));
 //object.test.js.map
+;
+"use strict";
+//extract.test.js.map
 ;
 "use strict";
 var $;
@@ -746,13 +576,13 @@ var $;
         },
         'decorate field getter'() {
             class Plus1 extends $.$mol_wrapper {
+                static last = 0;
                 static wrap(task) {
                     return function (...args) {
                         return Plus1.last = (task.call(this, ...args) || 0) + 1;
                     };
                 }
             }
-            Plus1.last = 0;
             class Foo {
                 static get two() {
                     return 1;
@@ -776,9 +606,7 @@ var $;
                 }
             }
             class Foo1 {
-                constructor() {
-                    this.level = 2;
-                }
+                level = 2;
                 pow(a) {
                     return a ** this.level;
                 }
@@ -799,11 +627,11 @@ var $;
                 }
             }
             class Foo {
+                static level = 2;
                 static pow(a) {
                     return a ** this.level;
                 }
             }
-            Foo.level = 2;
             __decorate([
                 Plus1.method
             ], Foo, "pow", null);
@@ -820,6 +648,7 @@ var $;
                 }
             }
             let Foo = class Foo {
+                bar;
                 constructor(bar) {
                     this.bar = bar;
                 }
@@ -841,129 +670,6 @@ var $;
     });
 })($ || ($ = {}));
 //frame.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'return source when same object'() {
-            const target = {};
-            $.$mol_assert_equal($.$mol_conform(target, target), target);
-        },
-        'return target when some is not object'() {
-            const obj = { a: 1 };
-            $.$mol_assert_equal($.$mol_conform(true, obj), true);
-            $.$mol_assert_equal($.$mol_conform(obj, true), obj);
-        },
-        'return target when some is null'() {
-            const obj = { a: 1 };
-            $.$mol_assert_equal($.$mol_conform(null, obj), null);
-            $.$mol_assert_equal($.$mol_conform(obj, null), obj);
-        },
-        'return target when some is undefined'() {
-            const obj = { a: 1 };
-            $.$mol_assert_equal($.$mol_conform(undefined, obj), undefined);
-            $.$mol_assert_equal($.$mol_conform(obj, undefined), obj);
-        },
-        'return target when different keys count'() {
-            const target = [1, 2, 3];
-            const source = [1, 2, 3, undefined];
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, target);
-            $.$mol_assert_equal(result.join(','), '1,2,3');
-        },
-        'return source when array values are strong equal'() {
-            const source = [1, 2, 3];
-            $.$mol_assert_equal($.$mol_conform([1, 2, 3], source), source);
-        },
-        'return source when object values are strong equal'() {
-            const source = { a: 1, b: 2 };
-            $.$mol_assert_equal($.$mol_conform({ a: 1, b: 2 }, source), source);
-        },
-        'return target when some values are not equal'() {
-            const target = [1, 2, 3];
-            const source = [1, 2, 5];
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, target);
-            $.$mol_assert_equal(result.join(','), '1,2,3');
-        },
-        'return source when values are deep equal'() {
-            const source = { foo: { bar: 1 } };
-            $.$mol_assert_equal($.$mol_conform({ foo: { bar: 1 } }, source), source);
-        },
-        'return target with equal values from source and not equal from target'() {
-            const source = { foo: { xxx: 1 }, bar: { xxx: 2 } };
-            const target = { foo: { xxx: 1 }, bar: { xxx: 3 } };
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, target);
-            $.$mol_assert_equal(result.foo, source.foo);
-            $.$mol_assert_equal(result.bar, target.bar);
-        },
-        'return target when equal but with different class'() {
-            const target = { '0': 1 };
-            $.$mol_assert_equal($.$mol_conform(target, [1]), target);
-        },
-        'return target when conformer for class is not defined'() {
-            const Obj = class {
-            };
-            const source = new Obj;
-            const target = new Obj;
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, target);
-        },
-        'return target when has cyclic reference'() {
-            const source = { foo: {} };
-            source['self'] = source;
-            const target = { foo: {} };
-            target['self'] = target;
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, target);
-            $.$mol_assert_equal(result['self'], target);
-            $.$mol_assert_equal(result.foo, source.foo);
-        },
-        'return source when equal dates'() {
-            const source = new Date(12345);
-            const target = new Date(12345);
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, source);
-        },
-        'return source when equal regular expressions'() {
-            const source = /\x22/mig;
-            const target = /\x22/mig;
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, source);
-        },
-        'return cached value if already conformed'() {
-            const source = { foo: { xxx: 1 }, bar: { xxx: 3 } };
-            const target = { foo: { xxx: 2 }, bar: { xxx: 3 } };
-            const result = $.$mol_conform(target, source);
-            target.foo.xxx = 1;
-            $.$mol_assert_equal($.$mol_conform(target.foo, source.foo), target.foo);
-        },
-        'skip readlony fields'() {
-            const source = { foo: {}, bar: {} };
-            const target = { foo: {}, bar: {} };
-            Object.defineProperty(target, 'bar', { value: {}, writable: false });
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, target);
-            $.$mol_assert_equal(result.foo, source.foo);
-            $.$mol_assert_equal(result.bar, target.bar);
-        },
-        'object with NaN'() {
-            const source = { foo: Number.NaN };
-            const target = { foo: Number.NaN };
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, source);
-        },
-        'array with NaN'() {
-            const source = [Number.NaN];
-            const target = [Number.NaN];
-            const result = $.$mol_conform(target, source);
-            $.$mol_assert_equal(result, source);
-        },
-    });
-})($ || ($ = {}));
-//conform.test.js.map
 ;
 "use strict";
 var $;
@@ -1000,6 +706,7 @@ var $;
 var $;
 (function ($) {
     class $mol_defer extends $.$mol_object {
+        run;
         constructor(run) {
             super();
             this.run = run;
@@ -1008,6 +715,11 @@ var $;
         destructor() {
             $mol_defer.drop(this);
         }
+        static all = [];
+        static timer = null;
+        static scheduleNative = (typeof requestAnimationFrame == 'function')
+            ? handler => requestAnimationFrame(handler)
+            : handler => setTimeout(handler, 16);
         static schedule() {
             if (this.timer)
                 return;
@@ -1039,354 +751,11 @@ var $;
                 defer.run();
         }
     }
-    $mol_defer.all = [];
-    $mol_defer.timer = null;
-    $mol_defer.scheduleNative = (typeof requestAnimationFrame == 'function')
-        ? handler => requestAnimationFrame(handler)
-        : handler => setTimeout(handler, 16);
     $.$mol_defer = $mol_defer;
 })($ || ($ = {}));
 //defer.js.map
 ;
 "use strict";
-var $;
-(function ($_1) {
-    $_1.$mol_test({
-        'Value has js-path name'() {
-            class App extends $_1.$mol_object2 {
-                static get title() { return new $_1.$mol_object2; }
-            }
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "title", null);
-            $_1.$mol_assert_equal(`${App.title}`, 'App.title');
-        },
-        'Simple property'() {
-            class App extends $_1.$mol_object2 {
-            }
-            App.value = 1;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "value", void 0);
-            $_1.$mol_assert_equal(App.value, 1);
-            App.value = 2;
-            $_1.$mol_assert_equal(App.value, 2);
-        },
-        'Instant actualization'($) {
-            class Source extends $_1.$mol_object2 {
-                constructor() {
-                    super(...arguments);
-                    this.value = 1;
-                }
-                get $() { return $; }
-                destructor() { }
-            }
-            __decorate([
-                $_1.$mol_atom2_field
-            ], Source.prototype, "value", void 0);
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get source() { return Source.create(); }
-                static get value() { return this.source.value + 1; }
-            }
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "source", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "value", null);
-            $_1.$mol_assert_equal(App.value, 2);
-            App.source.value = 2;
-            $_1.$mol_assert_equal(App.value, 3);
-        },
-        'Access to cached value'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get value() { return 1; }
-            }
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "value", null);
-            $_1.$mol_assert_equal($_1.$mol_atom2_value(() => App.value), undefined);
-            $_1.$mol_assert_equal(App.value, 1);
-            $_1.$mol_assert_equal($_1.$mol_atom2_value(() => App.value), 1);
-        },
-        'Do not recalc slaves on equal changes'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get result() { return this.first[0] + this.counter++; }
-            }
-            App.first = [1];
-            App.counter = 0;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "first", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_equal(App.result, 1);
-            App.first = [1];
-            $_1.$mol_assert_equal(App.result, 1);
-        },
-        'Do not recalc grand slave on equal direct slave result '($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get second() { return Math.abs(this.first); }
-                static get result() { return this.second + ++this.counter; }
-            }
-            App.first = 1;
-            App.counter = 0;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "first", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "second", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_equal(App.result, 2);
-            App.first = -1;
-            $_1.$mol_assert_equal(App.result, 2);
-        },
-        'Recalc when [not changed master] changes [following master]'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get second() {
-                    this.third = this.first;
-                    return 0;
-                }
-                static get result() { return this.second + this.third + ++this.counter; }
-            }
-            App.first = 1;
-            App.third = 0;
-            App.counter = 0;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "first", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "second", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "third", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_equal(App.result, 2);
-            App.first = 5;
-            $_1.$mol_assert_equal(App.result, 7);
-        },
-        'Branch switching'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get second() { return 2; }
-                static get result() {
-                    return (this.condition ? this.first : this.second) + this.counter++;
-                }
-            }
-            App.first = 1;
-            App.condition = true;
-            App.counter = 0;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "first", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "second", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "condition", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_equal(App.result, 1);
-            App.condition = false;
-            $_1.$mol_assert_equal(App.result, 3);
-            App.first = 10;
-            $_1.$mol_assert_equal(App.result, 3);
-        },
-        'Forbidden self invalidation'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get second() { return this.first + 1; }
-                static get result() {
-                    this.second;
-                    return this.first++;
-                }
-            }
-            App.first = 1;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "first", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "second", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_fail(() => App.result);
-        },
-        'Side effect inside computation'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static increase() { return ++this.first; }
-                static get result() {
-                    return this.increase() + 1;
-                }
-            }
-            App.first = 1;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "first", void 0);
-            __decorate([
-                $_1.$mol_fiber.method
-            ], App, "increase", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_equal(App.result, 3);
-        },
-        'Forbidden cyclic dependency'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get first() { return this.second - 1; }
-                static get second() { return this.first + 1; }
-            }
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "first", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "second", null);
-            $_1.$mol_assert_fail(() => App.first);
-        },
-        'Forget sub fibers on complete'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static count() { return this.counter++; }
-                static get result() { return this.count() + this.data; }
-            }
-            App.counter = 0;
-            App.data = 1;
-            __decorate([
-                $_1.$mol_fiber.method
-            ], App, "count", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "data", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_equal(App.result, 1);
-            App.data = 2;
-            $_1.$mol_assert_equal(App.result, 3);
-        },
-        async 'Automatic destroy owned value on self destruction'($) {
-            let counter = 0;
-            class Having extends $_1.$mol_object2 {
-                destructor() { counter++; }
-            }
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get having() { return Having.create(); }
-                static get result() {
-                    if (this.condition)
-                        this.having;
-                    return 0;
-                }
-            }
-            App.condition = true;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "having", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "condition", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            App.result;
-            App.condition = false;
-            App.result;
-            $_1.$mol_assert_equal(counter, 0);
-            await $_1.$mol_fiber_warp();
-            $_1.$mol_assert_equal(counter, 1);
-        },
-        async 'Do not destroy putted value'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get target() {
-                    return this.condition ? this.source : 0;
-                }
-            }
-            App.condition = true;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "source", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "condition", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "target", null);
-            App.source = 1;
-            $_1.$mol_assert_equal(App.target, 1);
-            App.condition = false;
-            $_1.$mol_assert_equal(App.target, 0);
-            await $_1.$mol_fiber_warp();
-            App.condition = true;
-            $_1.$mol_assert_equal(App.target, 1);
-        },
-        'Restore after error'($) {
-            class App extends $_1.$mol_object2 {
-                static get $() { return $; }
-                static get broken() {
-                    if (this.condition)
-                        $_1.$mol_fail(new Error('test error'));
-                    return 1;
-                }
-                static get result() { return this.broken; }
-            }
-            App.condition = false;
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "condition", void 0);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "broken", null);
-            __decorate([
-                $_1.$mol_atom2_field
-            ], App, "result", null);
-            $_1.$mol_assert_equal(App.result, 1);
-            App.condition = true;
-            $_1.$mol_assert_fail(() => App.result);
-            App.condition = false;
-            $_1.$mol_assert_equal(App.result, 1);
-        },
-        async 'auto fresh only when alive'($) {
-            let state = 1;
-            const monitor = new $.$mol_atom2;
-            monitor.$ = $;
-            monitor.calculate = () => {
-                new $.$mol_after_frame($_1.$mol_atom2.current.fresh);
-                return state;
-            };
-            $_1.$mol_assert_equal(monitor.get(), 1);
-            state = 2;
-            $_1.$mol_assert_equal(monitor.get(), 1);
-            $.$mol_after_mock_warp();
-            $_1.$mol_assert_equal(monitor.get(), 2);
-            state = 3;
-            $_1.$mol_assert_equal(monitor.get(), 2);
-            monitor.destructor();
-            $_1.$mol_assert_equal(monitor.value, undefined);
-            $.$mol_after_mock_warp();
-            await $.$mol_fiber_warp();
-            $_1.$mol_assert_equal(monitor.value, undefined);
-        },
-    });
-})($ || ($ = {}));
 //atom2.test.js.map
 ;
 "use strict";
@@ -1401,9 +770,9 @@ var $;
     $_1.$mol_test({
         'Property method'($) {
             class App extends $_1.$mol_object2 {
+                static $ = $;
                 static value(next = 1) { return next + 1; }
             }
-            App.$ = $;
             __decorate([
                 $_1.$mol_mem
             ], App, "value", null);
@@ -1514,11 +883,67 @@ var $;
 ;
 "use strict";
 var $;
+(function ($) {
+    $.$mol_test({
+        'Primitives'() {
+            $.$mol_assert_equal($.$mol_key(null), 'null');
+            $.$mol_assert_equal($.$mol_key(false), 'false');
+            $.$mol_assert_equal($.$mol_key(true), 'true');
+            $.$mol_assert_equal($.$mol_key(0), '0');
+            $.$mol_assert_equal($.$mol_key(''), '""');
+        },
+        'Array & POJO'() {
+            $.$mol_assert_equal($.$mol_key([null]), '[null]');
+            $.$mol_assert_equal($.$mol_key({ foo: 0 }), '{"foo":0}');
+            $.$mol_assert_equal($.$mol_key({ foo: [false] }), '{"foo":[false]}');
+        },
+        'Function'() {
+            const func = () => { };
+            $.$mol_assert_equal($.$mol_key(func), $.$mol_key(func));
+            $.$mol_assert_unique($.$mol_key(func), $.$mol_key(() => { }));
+        },
+        'Objects'() {
+            class User {
+            }
+            const jin = new User();
+            $.$mol_assert_equal($.$mol_key(jin), $.$mol_key(jin));
+            $.$mol_assert_unique($.$mol_key(jin), $.$mol_key(new User()));
+        },
+        'Elements'() {
+            const foo = $.$mol_jsx("div", null, "bar");
+            $.$mol_assert_equal($.$mol_key(foo), $.$mol_key(foo));
+            $.$mol_assert_unique($.$mol_key(foo), $.$mol_key($.$mol_jsx("div", null, "bar")));
+        },
+        'Custom JSON representation'() {
+            class User {
+                name;
+                age;
+                constructor(name, age) {
+                    this.name = name;
+                    this.age = age;
+                }
+                toJSON() { return { name: this.name }; }
+            }
+            $.$mol_assert_equal($.$mol_key(new User('jin', 18)), '{"name":"jin"}');
+        },
+        'Special native classes'() {
+            $.$mol_assert_equal($.$mol_key(new Date('xyz')), 'null');
+            $.$mol_assert_equal($.$mol_key(new Date('2001-01-02T03:04:05.678Z')), '"2001-01-02T03:04:05.678Z"');
+            $.$mol_assert_equal($.$mol_key(/./), '"/./"');
+            $.$mol_assert_equal($.$mol_key(/\./gimsu), '"/\\\\./gimsu"');
+        },
+    });
+})($ || ($ = {}));
+//key.test.js.map
+;
+"use strict";
+var $;
 (function ($_1) {
     $_1.$mol_test({
         'keyed reactive properties'($) {
             $_1.$mol_fiber_warp();
             class Fib extends $_1.$mol_object2 {
+                static $ = $;
                 static value(index, next) {
                     if (next)
                         return next;
@@ -1527,7 +952,6 @@ var $;
                     return this.value(index - 1) + this.value(index - 2);
                 }
             }
-            Fib.$ = $;
             __decorate([
                 $_1.$mol_mem_key
             ], Fib, "value", null);
@@ -1576,93 +1000,39 @@ var $;
 ;
 "use strict";
 var $;
-(function ($) {
-    $.$mol_test({
-        'const returns stored value'() {
-            const foo = { bar: $.$mol_const(Math.random()) };
-            $.$mol_assert_equal(foo.bar(), foo.bar());
-            $.$mol_assert_equal(foo.bar(), foo.bar['()']);
-        },
-    });
-})($ || ($ = {}));
-//const.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    function $mol_atom2_field(proto, name, descr) {
-        if (!descr)
-            descr = Object.getOwnPropertyDescriptor(proto, name);
-        const get = descr ? (descr.get || $.$mol_const(descr.value)) : (() => undefined);
-        const set = descr && descr.set || function (next) { get_cache(this).put(next); };
-        const store = new WeakMap();
-        Object.defineProperty(proto, name + "@", {
-            get: function () {
-                return store.get(this);
-            }
-        });
-        const get_cache = (host) => {
-            let cache = store.get(host);
-            if (!cache) {
-                cache = new $.$mol_atom2;
-                cache.calculate = get.bind(host);
-                cache[Symbol.toStringTag] = `${host}.${name}`;
-                cache.abort = () => {
-                    store.delete(host);
-                    cache.forget();
-                    return true;
-                };
-                $.$mol_owning_catch(host, cache);
-                store.set(host, cache);
-            }
-            return cache;
-        };
-        return {
-            get() {
-                return get_cache(this).get();
-            },
-            set,
-        };
-    }
-    $.$mol_atom2_field = $mol_atom2_field;
-})($ || ($ = {}));
-//field.js.map
-;
-"use strict";
-var $;
 (function ($_1) {
     $_1.$mol_test({
         async 'Autorun'($) {
             class App extends $_1.$mol_object2 {
-                static get init() {
+                static $ = $;
+                static state(next = 1) { return next; }
+                static counter = 0;
+                static init() {
                     ++this.counter;
-                    return this.state;
+                    return this.state();
                 }
             }
-            App.$ = $;
-            App.state = 1;
-            App.counter = 0;
             __decorate([
-                $_1.$mol_atom2_field
-            ], App, "state", void 0);
+                $_1.$mol_mem
+            ], App, "state", null);
             __decorate([
-                $_1.$mol_atom2_field
+                $_1.$mol_mem
             ], App, "init", null);
-            const autorun = $_1.$mol_atom2_autorun(() => App.init);
+            const autorun = $_1.$mol_atom2_autorun(() => App.init());
             autorun.$ = $;
             try {
                 await $_1.$mol_fiber_warp();
                 $_1.$mol_assert_equal(App.counter, 1);
-                App.state = 2;
+                App.state(2);
                 $_1.$mol_assert_equal(App.counter, 1);
                 await $_1.$mol_fiber_warp();
                 $_1.$mol_assert_equal(App.counter, 2);
-                App.state = 3;
+                App.state(3);
             }
             finally {
                 autorun.destructor();
             }
-            App.state = 4;
+            App.state(4);
             await $_1.$mol_fiber_warp();
             $_1.$mol_assert_equal(App.counter, 2);
         },
@@ -1683,14 +1053,27 @@ var $;
 var $;
 (function ($) {
     $.$mol_test({
+        'const returns stored value'() {
+            const foo = { bar: $.$mol_const(Math.random()) };
+            $.$mol_assert_equal(foo.bar(), foo.bar());
+            $.$mol_assert_equal(foo.bar(), foo.bar['()']);
+        },
+    });
+})($ || ($ = {}));
+//const.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
         'memoize field'() {
             class Foo {
+                static one = 1;
                 static get two() {
                     return ++this.one;
                 }
                 static set two(next) { }
             }
-            Foo.one = 1;
             __decorate([
                 $.$mol_memo.field
             ], Foo, "two", null);
@@ -1719,9 +1102,6 @@ var $;
 //name.test.js.map
 ;
 "use strict";
-//extract.test.js.map
-;
-"use strict";
 var $;
 (function ($_1) {
     $_1.$mol_test({
@@ -1729,11 +1109,11 @@ var $;
             class $mol_view_test_item extends $_1.$mol_view {
             }
             class $mol_view_test_block extends $_1.$mol_view {
+                static $ = $;
                 element(id) {
                     return new $mol_view_test_item();
                 }
             }
-            $mol_view_test_block.$ = $;
             __decorate([
                 $_1.$mol_mem_key
             ], $mol_view_test_block.prototype, "element", null);
@@ -2077,115 +1457,101 @@ var $;
 var $;
 (function ($) {
     $.$mol_test({
-        'default data'() {
-            const store = new $.$mol_store({
-                foo: 1,
-                bar: 2,
-            });
-            $.$mol_assert_equal(store.data().foo, 1);
-            $.$mol_assert_equal(store.data().bar, 2);
+        'encode utf8 string'() {
+            const str = 'Hello, ΧΨΩЫ';
+            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
+            $.$mol_assert_like($.$mol_charset_encode(str), encoded);
         },
-        'safe reference'() {
-            const foo = { foo: 1 };
-            const bar = { bar: 1 };
-            const store = new $.$mol_store({ foo, bar });
-            store.data({ foo, bar });
-            store.data({
-                foo: { foo: 1 },
-                bar: { bar: 3 },
-            });
-            $.$mol_assert_equal(store.data().foo, foo);
-            $.$mol_assert_unique(store.data().bar, bar);
+    });
+})($ || ($ = {}));
+//encode.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'decode utf8 string'() {
+            const str = 'Hello, ΧΨΩЫ';
+            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
+            $.$mol_assert_equal($.$mol_charset_decode(encoded), str);
+            $.$mol_assert_equal($.$mol_charset_decode(encoded, 'utf8'), str);
         },
-        'get and set by shapshot'() {
-            const store = new $.$mol_store({
-                foo: 1,
-                bar: 2,
-            });
-            $.$mol_assert_equal(store.snapshot(), '{"foo":1,"bar":2}');
-            store.snapshot('{"foo":2,"bar":1}');
-            $.$mol_assert_equal(store.data().foo, 2);
-            $.$mol_assert_equal(store.data().bar, 1);
+        'decode empty string'() {
+            const encoded = new Uint8Array([]);
+            $.$mol_assert_equal($.$mol_charset_decode(encoded), '');
         },
-        'get and set by key'() {
-            const store = new $.$mol_store({
-                foo: 1,
-            });
-            $.$mol_assert_equal(store.value('foo'), 1);
-            store.value('foo', 2);
-            $.$mol_assert_equal(store.value('foo'), 2);
-        },
-        'get and set by lens'() {
-            const store = new $.$mol_store({
-                foo: 1,
-            });
-            const lens = store.sub('foo');
-            $.$mol_assert_equal(lens.data(), 1);
-            lens.data(2);
-            $.$mol_assert_equal(lens.data(), 2);
-        },
-        'views and actions'() {
-            const Person = class extends $.$mol_store {
-                get full_name() {
-                    const name = this.value('name');
-                    return name.first + ' ' + name.last;
-                }
-                swap_names() {
-                    const name = this.value('name');
-                    this.value('name', {
-                        first: name.last,
-                        last: name.first,
-                    });
-                }
+    });
+})($ || ($ = {}));
+//decode.test.js.map
+;
+"use strict";
+var $;
+(function ($_1) {
+    $_1.$mol_test({
+        'pack and unpack chunk'($) {
+            const source = {
+                head: 6618611909121,
+                self: 6618611909121,
+                prev: 6618611909121,
+                next: 6618611909121,
+                peer: 6618611909121,
+                time: 67305985,
+                data: { a: [1] },
             };
-            const store = new Person({
-                name: {
-                    first: 'Foo',
-                    last: 'Bar',
-                },
-            });
-            $.$mol_assert_equal(store.full_name, 'Foo Bar');
-            store.swap_names();
-            $.$mol_assert_equal(store.full_name, 'Bar Foo');
+            const packed = $.$hyoo_crowd_chunk_pack(source);
+            const unpacked = $.$hyoo_crowd_chunk_unpack(packed);
+            $_1.$mol_assert_like(source, unpacked);
         },
-        'nested views and actions'() {
-            class Person extends $.$mol_store {
-                get full_name() {
-                    const name = this.value('name');
-                    return name.first + ' ' + name.last;
-                }
-                swap_names() {
-                    const name = this.value('name');
-                    this.value('name', {
-                        first: name.last,
-                        last: name.first,
-                    });
-                }
+    });
+})($ || ($ = {}));
+//chunk.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        async 'put, get, drop, count records and clear store'() {
+            const db = await $.$$.$mol_db('$mol_db_test', mig => mig.store_make('letters'));
+            const trans = db.change('letters');
+            try {
+                const { letters } = trans.stores;
+                $.$mol_assert_like(await letters.get(1), undefined);
+                $.$mol_assert_like(await letters.get(2), undefined);
+                $.$mol_assert_like(await letters.count(), 0);
+                await letters.put('a');
+                await letters.put('b', 1);
+                await letters.put('c', 2);
+                $.$mol_assert_like(await letters.get(1), 'b');
+                $.$mol_assert_like(await letters.get(2), 'c');
+                $.$mol_assert_like(await letters.count(), 2);
+                await letters.drop(1);
+                $.$mol_assert_like(await letters.get(1), undefined);
+                $.$mol_assert_like(await letters.count(), 1);
+                await letters.clear();
+                $.$mol_assert_like(await letters.count(), 0);
             }
-            class Band extends $.$mol_store {
-                get members() {
-                    const lens = this.sub('members');
-                    return new Proxy({}, {
-                        get: (_, id) => lens.sub(id, new Person),
-                    });
-                }
+            finally {
+                trans.abort();
+                db.kill();
             }
-            const band = new Band({
-                name: 'Dream Team',
-                members: {
-                    foo: {
-                        name: {
-                            first: 'Foo',
-                            last: 'Bar',
-                        },
-                    }
-                }
-            });
-            const person = band.members['foo'];
-            $.$mol_assert_equal(person.full_name, 'Foo Bar');
-            person.swap_names();
-            $.$mol_assert_equal(band.data().members['foo'].name.first, 'Bar');
-            $.$mol_assert_equal(band.data().members['foo'].name.last, 'Foo');
+        },
+        async 'select by query'() {
+            const db = await $.$$.$mol_db('$mol_db_test', mig => mig.store_make('letters'));
+            const trans = db.change('letters');
+            try {
+                const { letters } = trans.stores;
+                await letters.put('a');
+                await letters.put('b');
+                await letters.put('c');
+                await letters.put('d');
+                $.$mol_assert_like(await letters.select(), ['a', 'b', 'c', 'd']);
+                $.$mol_assert_like(await letters.select(null, 2), ['a', 'b']);
+                $.$mol_assert_like(await letters.select(IDBKeyRange.bound(2, 3)), ['b', 'c']);
+            }
+            finally {
+                trans.abort();
+                db.kill();
+            }
         },
     });
 })($ || ($ = {}));
@@ -2195,56 +1561,84 @@ var $;
 var $;
 (function ($) {
     $.$mol_test({
-        'is_new'() {
+        async 'take and drop db'() {
+            const db = await $.$$.$mol_db('$mol_db_test');
+            await db.kill();
+        },
+        async 'make and drop store in separate migrations'() {
+            try {
+                const db1 = await $.$$.$mol_db('$mol_db_test', mig => mig.store_make('temp'));
+                db1.destructor();
+                $.$mol_assert_like(db1.stores, ['temp']);
+                $.$mol_assert_like(db1.version, 2);
+                const db2 = await $.$$.$mol_db('$mol_db_test', mig => mig.store_make('temp'), mig => mig.store_drop('temp'));
+                db2.destructor();
+                $.$mol_assert_like(db2.stores, []);
+                $.$mol_assert_like(db2.version, 3);
+            }
+            finally {
+                const db0 = await $.$$.$mol_db('$mol_db_test');
+                await db0.kill();
+            }
+        },
+    });
+})($ || ($ = {}));
+//db.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        'fresh'() {
             const clock = new $.$hyoo_crowd_clock;
-            clock.feed(1000001);
-            clock.feed(-2000002);
-            $.$mol_assert_ok(clock.is_new(-2000003));
-            $.$mol_assert_ok(clock.is_new(2000003));
-            $.$mol_assert_ok(clock.is_new(3000001));
-            $.$mol_assert_not(clock.is_new(1000002));
-            $.$mol_assert_not(0);
+            clock.see(111, 1);
+            clock.see(222, 2);
+            $.$mol_assert_ok(clock.fresh(222, 3));
+            $.$mol_assert_ok(clock.fresh(333, 1));
+            $.$mol_assert_not(clock.fresh(222, 1));
+            $.$mol_assert_not(clock.fresh(333, 0));
         },
         'fork'() {
-            const left = new $.$hyoo_crowd_clock(1);
-            left.feed(1000001);
-            left.feed(-2000002);
-            const right = left.fork(2);
-            $.$mol_assert_equal(right.version_max, 2000002);
-            $.$mol_assert_like([...right.saw_versions], [
-                [1, 1000001],
-                [2, 2000002],
+            const left = new $.$hyoo_crowd_clock;
+            left.see(111, 1);
+            left.see(222, 2);
+            const right = new $.$hyoo_crowd_clock(left);
+            $.$mol_assert_equal(right.now, 2);
+            $.$mol_assert_like([...right], [
+                [111, 1],
+                [222, 2],
             ]);
         },
         'generate'() {
-            const clock = new $.$hyoo_crowd_clock(1);
-            clock.feed(1000001);
-            clock.feed(-2000002);
-            const stamp = clock.generate();
-            $.$mol_assert_equal(stamp, 3000001);
-            $.$mol_assert_equal(clock.version_max, 3000001);
-            $.$mol_assert_like([...clock.saw_versions], [
-                [1, 3000001],
-                [2, 2000002],
-            ]);
+            const clock = new $.$hyoo_crowd_clock;
+            clock.see(111, 1);
+            clock.see(222, 2);
+            const now = Date.now();
+            const time1 = clock.tick(111);
+            $.$mol_assert_ok(time1 >= now);
+            $.$mol_assert_ok(clock.now >= now);
+            clock.see(222, now + 1000);
+            const time2 = clock.tick(222);
+            $.$mol_assert_ok(time2 > now + 1000);
+            $.$mol_assert_ok(clock.now > now + 1000);
         },
-        'is_ahead'() {
+        'ahead'() {
             const clock1 = new $.$hyoo_crowd_clock;
-            clock1.feed(1000001);
-            clock1.feed(-2000002);
+            clock1.see(111, 1);
+            clock1.see(222, 2);
             const clock2 = new $.$hyoo_crowd_clock;
-            clock2.feed(1000001);
-            clock2.feed(-2000003);
+            clock2.see(111, 1);
+            clock2.see(333, 2);
             const clock3 = new $.$hyoo_crowd_clock;
-            clock3.feed(1000001);
-            clock3.feed(2000002);
-            clock3.feed(2000003);
-            $.$mol_assert_ok(clock1.is_ahead(clock2));
-            $.$mol_assert_ok(clock2.is_ahead(clock1));
-            $.$mol_assert_ok(clock3.is_ahead(clock1));
-            $.$mol_assert_ok(clock3.is_ahead(clock2));
-            $.$mol_assert_not(clock1.is_ahead(clock3));
-            $.$mol_assert_not(clock2.is_ahead(clock3));
+            clock3.see(111, 1);
+            clock3.see(222, 2);
+            clock3.see(333, 2);
+            $.$mol_assert_ok(clock1.ahead(clock2));
+            $.$mol_assert_ok(clock2.ahead(clock1));
+            $.$mol_assert_ok(clock3.ahead(clock1));
+            $.$mol_assert_ok(clock3.ahead(clock2));
+            $.$mol_assert_not(clock1.ahead(clock3));
+            $.$mol_assert_not(clock2.ahead(clock3));
         },
     });
 })($ || ($ = {}));
@@ -2253,621 +1647,237 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    $.$mol_test({
-        'Default state'() {
-            const store = new $.$hyoo_crowd_reg();
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], [], []));
-            $.$mol_assert_like(store.value(), null);
-            $.$mol_assert_like(store.version, 0);
-        },
-        'Serial changes'() {
-            const store = new $.$hyoo_crowd_reg().fork(1);
-            store.str('foo');
-            store.str('bar');
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['bar'], [+2000001], [+2000001]));
-        },
-        'Ignore same changes'() {
-            const store = new $.$hyoo_crowd_reg().fork(1);
-            store.str('foo');
-            store.str('foo');
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo'], [+1000001], [+1000001]));
-        },
-        'Slice after version'() {
-            const store = new $.$hyoo_crowd_reg().fork(1);
-            store.str('foo');
-            const clock1 = store.clock.fork(0);
-            store.str('bar');
-            const clock2 = store.clock.fork(0);
-            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['bar'], [+2000001], [+2000001]));
-            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], [], [+2000001]));
-        },
-        'Cuncurrent changes'() {
-            const base = new $.$hyoo_crowd_reg().fork(1);
-            base.str('foo');
-            const left = base.fork(2);
-            left.str('bar');
-            const right = base.fork(3);
-            right.str('xxx');
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['xxx'], [+2000003], [+1000001, +2000002, +2000003]));
-        },
-    });
-})($ || ($ = {}));
-//reg.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'Default state'() {
-            const val = new $.$hyoo_crowd_numb();
-            $.$mol_assert_like(val.delta(), $.$hyoo_crowd_delta([], [], []));
-            $.$mol_assert_like(val.numb(), 0);
-        },
-        'Serial changes'() {
-            const store = new $.$hyoo_crowd_numb().fork(1).shift(+5).shift(-3);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([+2], [+2000001], [+2000001]));
-            $.$mol_assert_like(store.numb(), 2);
-        },
-        'Slice after version'() {
-            const store = new $.$hyoo_crowd_numb();
-            const store1 = store.fork(1).shift(+5);
-            const clock1 = store1.clock.fork(0);
-            store1.shift(-3);
-            const clock2 = store1.clock.fork(0);
-            const store2 = store1.fork(2).shift(-2);
-            const clock3 = store2.clock.fork(0);
-            $.$mol_assert_like(store2.delta(clock1), $.$hyoo_crowd_delta([+2, -2], [+2000001, +3000002], [+2000001, +3000002]));
-            $.$mol_assert_like(store2.delta(clock2), $.$hyoo_crowd_delta([-2], [+3000002], [2000001, +3000002]));
-            $.$mol_assert_like(store2.delta(clock3), $.$hyoo_crowd_delta([], [], [2000001, +3000002]));
-        },
-        'Concurrent changes'() {
-            const base = new $.$hyoo_crowd_numb().fork(1).shift(+5);
-            const left = base.fork(2).shift(+3).shift(+1);
-            const right = base.fork(3).shift(-2).shift(+1);
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            left.apply(right_delta);
-            right.apply(left_delta);
-            $.$mol_assert_like(left.numb(), right.numb(), 8);
-        },
-    });
-})($ || ($ = {}));
-//numb.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class $hyoo_crowd_numb extends $.$hyoo_crowd_store {
-        constructor() {
-            super(...arguments);
-            this.stores = new Map();
-        }
-        value() {
-            let res = 0;
-            for (const store of this.stores.values()) {
-                res += store.numb();
+    $.$mol_test_mocks.push(context => {
+        class $mol_state_local_mock extends $.$mol_state_local {
+            static state = {};
+            static value(key, next = this.state[key], force) {
+                return this.state[key] = (next || null);
             }
-            return res;
         }
-        numb() {
-            return this.value();
-        }
-        delta(clock = new $.$hyoo_crowd_clock, delta = this.clock.delta([], [])) {
-            for (const store of this.stores.values()) {
-                const patch = store.delta(clock);
-                if (patch.values.length === 0)
-                    continue;
-                delta.values.push(...patch.values);
-                delta.stamps.push(...patch.stamps);
-            }
-            return delta;
-        }
-        reg(path) {
-            let store = this.stores.get(path);
-            if (store)
-                return store;
-            store = new $.$hyoo_crowd_reg(this.clock);
-            this.stores.set(path, store);
-            return store;
-        }
-        shift(diff = 1) {
-            const store = this.reg(this.clock.peer);
-            const prev = Number(store.numb());
-            store.numb(prev + diff);
-            return this;
-        }
-        apply(delta) {
-            for (let i = 0; i < delta.values.length; ++i) {
-                const peer = this.clock.peer_from(delta.stamps[i]);
-                this.reg(peer).apply($.$hyoo_crowd_delta([delta.values[i]], [delta.stamps[i]], delta.clock));
-            }
-            return this;
-        }
-    }
-    $.$hyoo_crowd_numb = $hyoo_crowd_numb;
+        __decorate([
+            $.$mol_mem_key
+        ], $mol_state_local_mock, "value", null);
+        context.$mol_state_local = $mol_state_local_mock;
+    });
 })($ || ($ = {}));
-//numb.js.map
+//local.mock.test.js.map
 ;
 "use strict";
 var $;
 (function ($) {
     $.$mol_test({
-        'Add keys'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').add('bar').delta(), $.$hyoo_crowd_delta(['foo', 'bar'], [+1000001, +2000001], [+2000001]));
-        },
-        'Slice after version'() {
-            const store = new $.$hyoo_crowd_set().fork(1);
-            store.add('foo');
-            const clock1 = store.clock.fork(0);
-            store.add('bar');
-            const clock2 = store.clock.fork(0);
-            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['bar'], [+2000001], [+2000001]));
-            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], [], [+2000001]));
-        },
-        'Ignore existen keys'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').add('foo').delta(), $.$hyoo_crowd_delta(['foo'], [+1000001], [+1000001]));
-        },
-        'Partial remove keys'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').add('bar').remove('foo').delta(), $.$hyoo_crowd_delta(['foo', 'bar'], [-3000001, +2000001], [+3000001]));
-        },
-        'Ignore already removed keys'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add('foo').remove('foo').remove('foo').delta(), $.$hyoo_crowd_delta(['foo'], [-2000001], [+2000001]));
-        },
-        'Convert to native Set'() {
-            const store = new $.$hyoo_crowd_set().fork(1).add('foo').add('xxx').remove('foo');
-            $.$mol_assert_like(store.items, ["xxx"]);
-        },
-        'Merge different sets'() {
-            const left = new $.$hyoo_crowd_set().fork(2).add('foo').add('bar');
-            const right = new $.$hyoo_crowd_set().fork(3).add('xxx').add('yyy').remove('xxx');
-            const left_delta = left.delta();
-            const right_delta = right.delta();
-            $.$mol_assert_like(left.apply(right_delta).items.sort(), right.apply(left_delta).items.sort(), ['bar', 'foo', 'yyy']);
-        },
-        'Merge branches with common base'() {
-            const base = new $.$hyoo_crowd_set().fork(1).add('foo').add('bar');
-            const left = base.fork(2).add('xxx');
-            const right = base.fork(3).remove('foo');
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).items.sort(), right.apply(left_delta).items.sort(), ['bar', 'xxx']);
-        },
-        'Concurrent Add and Remove'() {
-            const base = new $.$hyoo_crowd_set().fork(1).add('foo');
-            const left = base.fork(2).add('foo').remove('bar');
-            const right = base.fork(3).remove('foo').add('bar');
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).items.sort(), right.apply(left_delta).items.sort(), ['bar']);
-        },
-        'Number ids support'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_set().fork(1).add(1).add(2).add(2).delta(), $.$hyoo_crowd_delta([1, 2], [+1000001, +2000001], [+2000001]));
+        'local get set delete'() {
+            var key = '$mol_state_local_test:' + Math.random();
+            $.$mol_assert_equal($.$mol_state_local.value(key), null);
+            $.$mol_state_local.value(key, 123);
+            $.$mol_assert_equal($.$mol_state_local.value(key), 123);
+            $.$mol_state_local.value(key, null);
+            $.$mol_assert_equal($.$mol_state_local.value(key), null);
         },
     });
 })($ || ($ = {}));
-//set.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class $hyoo_crowd_set extends $.$hyoo_crowd_store {
-        constructor() {
-            super(...arguments);
-            this.stamps = new Map();
-        }
-        get count() {
-            return this.items.length;
-        }
-        get items() {
-            const delta = this.delta();
-            return delta.values.filter((_, index) => delta.stamps[index] > 0);
-        }
-        has(val) {
-            return this.stamps.get(val) > 0;
-        }
-        version_item(val) {
-            return this.clock.version_from(this.stamps.get(val) ?? 0);
-        }
-        delta(clock = new $.$hyoo_crowd_clock, delta = this.clock.delta([], [])) {
-            for (const [key, stamp] of this.stamps) {
-                if (!clock.is_new(stamp))
-                    continue;
-                delta.values.push(key);
-                delta.stamps.push(stamp);
-            }
-            return delta;
-        }
-        add(key) {
-            if (this.has(key))
-                return this;
-            this.apply(this.clock.delta([key], [this.clock.generate()]));
-            return this;
-        }
-        remove(key) {
-            if (!this.has(key))
-                return this;
-            this.apply(this.clock.delta([key], [-this.clock.generate()]));
-            return this;
-        }
-        apply(delta) {
-            for (let i = 0; i < delta.values.length; ++i) {
-                const key = delta.values[i];
-                const stamp = delta.stamps[i];
-                const version = this.clock.version_from(stamp);
-                if (this.version_item(key) >= version)
-                    continue;
-                this.stamps.set(key, stamp);
-                this.clock.feed(version);
-            }
-            return this;
-        }
-    }
-    $.$hyoo_crowd_set = $hyoo_crowd_set;
-})($ || ($ = {}));
-//set.js.map
+//local.test.js.map
 ;
 "use strict";
 var $;
 (function ($) {
     $.$mol_test({
-        'Put values to end'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar').delta(), $.$hyoo_crowd_delta(['foo', 'bar'], [+1000001, +2000001], [2000001]));
+        async 'sizes'() {
+            const pair = await $.$$.$mol_crypto_auditor_pair();
+            const key_private = await pair.private.serial();
+            $.$mol_assert_equal(key_private.byteLength, $.$mol_crypto_auditor_private.size);
+            const key_public = await pair.public.serial();
+            $.$mol_assert_equal(key_public.byteLength, $.$mol_crypto_auditor_public.size);
+            const data = new Uint8Array([1, 2, 3]);
+            const sign = await pair.private.sign(data);
+            $.$mol_assert_equal(sign.byteLength, $.$mol_crypto_auditor_sign_size);
         },
-        'Ignore existen values'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('foo').delta(), $.$hyoo_crowd_delta(['foo'], [+2000001], [2000001]));
+        async 'verify self signed with auto generated key'() {
+            const auditor = await $.$$.$mol_crypto_auditor_pair();
+            const data = new Uint8Array([1, 2, 3]);
+            const sign = await auditor.private.sign(data);
+            $.$mol_assert_ok(await auditor.public.verify(data, sign));
         },
-        'Slice after version'() {
-            const store = new $.$hyoo_crowd_list().fork(1);
-            store.insert('foo');
-            const clock1 = store.clock.fork(0);
-            store.insert('bar');
-            const clock2 = store.clock.fork(0);
-            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['foo', 'bar'], [+1000001, +2000001], [2000001]));
-            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], [], [2000001]));
-        },
-        'Put value to the middle'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar').insert('xxx', 1).delta(), $.$hyoo_crowd_delta(['foo', 'xxx', 'bar'], [+1000001, +3000001, +2000001], [3000001]));
-        },
-        'Put value to the start'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar', 0).delta(), $.$hyoo_crowd_delta(['bar', 'foo'], [+2000001, +1000001], [2000001]));
-        },
-        'Partial cut values'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar').cut('foo').delta(), $.$hyoo_crowd_delta(['bar', 'foo'], [+2000001, -3000001], [3000001]));
-        },
-        'Ignore already cutted values'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert('foo').cut('foo').cut('foo').delta(), $.$hyoo_crowd_delta(['foo'], [-2000001], [2000001]));
-        },
-        'Convert to native array'() {
-            const store = new $.$hyoo_crowd_list().fork(1)
-                .insert('foo')
-                .insert('bar', 0)
-                .insert('xxx')
-                .cut('foo');
-            $.$mol_assert_like(store.items(), ["bar", "xxx"]);
-        },
-        'Insert by native array'() {
-            const store = new $.$hyoo_crowd_list().fork(1)
-                .insert('foo')
-                .insert('bar');
-            store.items(['foo', 'xxx', 'bar']);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'xxx', 'bar'], [1000001, 3000001, 2000001], [3000001]));
-        },
-        'Remove by native array'() {
-            const store = new $.$hyoo_crowd_list().fork(1)
-                .insert('foo')
-                .insert('xxx')
-                .insert('bar');
-            store.items(['foo', 'bar']);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'bar', 'xxx'], [1000001, 3000001, -4000001], [4000001]));
-        },
-        'Replace by native array'() {
-            const store = new $.$hyoo_crowd_list().fork(1)
-                .insert('foo')
-                .insert('xxx')
-                .insert('bar');
-            store.items(['foo', 'yyy', 'bar']);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'yyy', 'bar', 'xxx'], [1000001, 5000001, 3000001, -4000001], [5000001]));
-        },
-        'Reorder by native array'() {
-            const store = new $.$hyoo_crowd_list().fork(1)
-                .insert('foo')
-                .insert('xxx')
-                .insert('bar');
-            store.items(['foo', 'bar', 'xxx']);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['foo', 'bar', 'xxx'], [1000001, 3000001, 5000001], [5000001]));
-        },
-        'Merge different sequences'() {
-            const left = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
-            const right = new $.$hyoo_crowd_list().fork(2).insert('xxx').insert('yyy');
-            const left_delta = left.delta();
-            const right_delta = right.delta();
-            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['xxx', 'yyy', 'foo', 'bar'], [+1000002, +2000002, +1000001, +2000001], [2000001, 2000002]));
-        },
-        'Insert in the same place'() {
-            const base = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
-            const left = base.fork(2).insert('xxx', 1);
-            const right = base.fork(3).insert('yyy', 1);
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['foo', 'yyy', 'xxx', 'bar'], [+1000001, +3000003, +3000002, +2000001], [2000001, 3000002, 3000003]));
-        },
-        'Insert after moved'() {
-            const base = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
-            const left = base.fork(2).insert('xxx', 1);
-            const right = base.fork(3).insert('foo', 2);
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['xxx', 'bar', 'foo'], [+3000002, +2000001, +3000003], [2000001, 3000002, 3000003]));
-        },
-        'Insert after cutted'() {
-            const base = new $.$hyoo_crowd_list().fork(1).insert('foo').insert('bar');
-            const left = base.fork(2).insert('xxx', 1);
-            const right = base.fork(3).cut('foo');
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['xxx', 'bar', 'foo'], [+3000002, +2000001, -3000003], [2000001, 3000002, 3000003]));
-        },
-        'Number ids support'() {
-            $.$mol_assert_like(new $.$hyoo_crowd_list().fork(1).insert(1).insert(2).insert(3, 1).delta(), $.$hyoo_crowd_delta([1, 3, 2], [+1000001, +3000001, +2000001], [3000001]));
+        async 'verify signed with exported auto generated key'() {
+            const pair = await $.$$.$mol_crypto_auditor_pair();
+            const data = new Uint8Array([1, 2, 3]);
+            const Alice = await $.$mol_crypto_auditor_private.from(await pair.private.serial());
+            const sign = await Alice.sign(data);
+            const Bob = await $.$mol_crypto_auditor_public.from(await pair.public.serial());
+            $.$mol_assert_ok(await Bob.verify(data, sign));
         },
     });
 })($ || ($ = {}));
-//list.test.js.map
+//auditor.test.js.map
 ;
 "use strict";
 var $;
 (function ($) {
+    const png = new Uint8Array([0x1a, 0x0a, 0x00, 0x49, 0x48, 0x78, 0xda]);
     $.$mol_test({
-        'Default state'() {
-            const store = $.$hyoo_crowd_union.of({
-                counter: $.$hyoo_crowd_numb,
-                string: $.$hyoo_crowd_reg,
-            }).make();
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], [], []));
-            $.$mol_assert_like(store.type, null);
-            $.$mol_assert_like(store.as('counter'), null);
-            $.$mol_assert_like(store.as('string'), null);
+        'base64 encode string'() {
+            $.$mol_assert_equal($.$mol_base64_encode('Hello, ΧΨΩЫ'), 'SGVsbG8sIM6nzqjOqdCr');
         },
-        'Change type with default value'() {
-            const store = $.$hyoo_crowd_union.of({
-                counter: $.$hyoo_crowd_numb,
-                string: $.$hyoo_crowd_reg,
-                object: $.$hyoo_crowd_set,
-                array: $.$hyoo_crowd_list,
-            }).make();
-            store.to('counter');
-            $.$mol_assert_like(store.type, 'counter');
-            $.$mol_assert_like(store.as('counter').numb(), 0);
-        },
-        'Change value'() {
-            const store = $.$hyoo_crowd_union.of({
-                counter: $.$hyoo_crowd_numb,
-                string: $.$hyoo_crowd_reg,
-                object: $.$hyoo_crowd_set,
-                array: $.$hyoo_crowd_list,
-            }).make().fork(1);
-            store.to('counter').shift(+5).shift(-2);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['counter', +3], [-1000001, +3000001], [3000001]));
-        },
-        'Slice after version'() {
-            const store = $.$hyoo_crowd_union.of({
-                counter: $.$hyoo_crowd_numb,
-                string: $.$hyoo_crowd_reg,
-                object: $.$hyoo_crowd_set,
-                array: $.$hyoo_crowd_list,
-            }).make().fork(1);
-            store.to('object').add('foo');
-            const clock1 = store.clock.fork(0);
-            store.to('object').add('bar');
-            const clock2 = store.clock.fork(0);
-            $.$mol_assert_like(store.delta(clock1), $.$hyoo_crowd_delta(['object', 'bar'], [-1000001, +3000001], [3000001]));
-            $.$mol_assert_like(store.delta(clock2), $.$hyoo_crowd_delta([], [], [3000001]));
-        },
-        'Reinterpret list as reg'() {
-            const store = $.$hyoo_crowd_union.of({
-                counter: $.$hyoo_crowd_numb,
-                string: $.$hyoo_crowd_reg,
-                object: $.$hyoo_crowd_set,
-                array: $.$hyoo_crowd_list,
-            }).make().fork(1);
-            store.to('string').str('foo');
-            store.to('string').str('bar');
-            $.$mol_assert_like(store.to('array').items(), ['bar']);
-            store.as('array').insert('xxx');
-            $.$mol_assert_like(store.to('string').str(), 'xxx');
-        },
-        'Cross merge list and register'() {
-            const base = $.$hyoo_crowd_union.of({
-                counter: $.$hyoo_crowd_numb,
-                string: $.$hyoo_crowd_reg,
-                object: $.$hyoo_crowd_set,
-                array: $.$hyoo_crowd_list,
-            }).make().fork(1);
-            base.to('string').str('foo');
-            const left = base.fork(2);
-            left.as('string').str('bar');
-            const right = base.fork(3);
-            right.to('array').insert('xxx');
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['array', 'bar', 'foo', 'xxx'], [-3000003, +3000002, +2000001, +4000003], [2000001, 3000002, 4000003]));
+        'base64 encode binary'() {
+            $.$mol_assert_equal($.$mol_base64_encode(png), 'GgoASUh42g==');
         },
     });
 })($ || ($ = {}));
-//union.test.js.map
+//encode.test.js.map
 ;
 "use strict";
 var $;
 (function ($) {
+    const png = new Uint8Array([0x1a, 0x0a, 0x00, 0x49, 0x48, 0x78, 0xda]);
     $.$mol_test({
-        'Register => Tagged Union'() {
-            let left = $.$hyoo_crowd_reg.make().fork(2);
-            left.numb(777);
-            left.numb(123);
-            let right = $.$hyoo_crowd_union.of({
-                index: $.$hyoo_crowd_reg,
-                count: $.$hyoo_crowd_reg,
-            }).make().fork(1);
-            right.apply(left.delta());
-            $.$mol_assert_like(right.type, "index");
-            $.$mol_assert_like(right.as('index').numb(), 123);
+        'base64 decode string'() {
+            $.$mol_assert_like($.$mol_base64_decode('SGVsbG8sIM6nzqjOqdCr'), new TextEncoder().encode('Hello, ΧΨΩЫ'));
         },
-        'Tagged Union => Register'() {
-            let left = $.$hyoo_crowd_union.of({
-                index: $.$hyoo_crowd_reg,
-                count: $.$hyoo_crowd_reg,
-            }).make().fork(1);
-            left.to('index').numb(777);
-            left.to('count');
-            let right = $.$hyoo_crowd_reg.make().fork(2);
-            right.apply(left.delta());
-            $.$mol_assert_like(right.numb(), 777);
-        },
-        'Tagged Union => Counter'() {
-            let left = $.$hyoo_crowd_union.of({
-                index: $.$hyoo_crowd_reg,
-                count: $.$hyoo_crowd_reg,
-            }).make().fork(1);
-            left.to('index').numb(777);
-            left.to('count');
-            let right = $.$hyoo_crowd_numb.make().fork(2);
-            right.apply(left.delta());
-            $.$mol_assert_like(right.numb(), 777);
+        'base64 decode binary'() {
+            $.$mol_assert_like($.$mol_base64_decode('GgoASUh42g=='), png);
         },
     });
 })($ || ($ = {}));
-//recast.test.js.map
+//decode.test.js.map
 ;
 "use strict";
 var $;
 (function ($) {
     $.$mol_test({
-        'Change dict by different keys'() {
-            const val = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make().fork(1);
-            val.for('foo').insert(666);
-            val.for('bar').insert(777);
-            val.for('foo').insert(888, 0);
-            val.for('bar').cut(777);
-            $.$mol_assert_like(val.delta(), $.$hyoo_crowd_delta(['foo', 888, 666, 'bar', 777], [-2, 3000001, 1000001, -1, -4000001], [4000001]));
-        },
-        'Slice dict after version'() {
-            const val = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_set }).make().fork(1);
-            val.for('foo').add(1);
-            val.for('bar').add(2);
-            val.for('xxx').add(3);
-            const clock1 = val.clock.fork(0);
-            val.for('foo').add(4);
-            val.for('bar').add(5);
-            val.for('xxx').add(6);
-            const clock2 = val.clock.fork(0);
-            $.$mol_assert_like(val.delta(clock1), $.$hyoo_crowd_delta(['foo', 4, 'bar', 5, 'xxx', 6], [-1, +4000001, -1, +5000001, -1, +6000001], [6000001]));
-            $.$mol_assert_like(val.delta(clock2), $.$hyoo_crowd_delta([], [], [6000001]));
-        },
-        'Merge different dicts'() {
-            const left = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make().fork(1);
-            left.for('foo').insert(666);
-            left.for('').insert('xxx');
-            const right = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make().fork(2);
-            right.for('foo').insert(777);
-            right.for('bar').insert('yyy');
-            right.for('bar').insert('zzz');
-            const left_delta = left.delta();
-            const right_delta = right.delta();
-            $.$mol_assert_like(left.apply(right_delta).delta(), $.$hyoo_crowd_delta(['foo', 777, 666, '', 'xxx', 'bar', 'yyy', 'zzz'], [-2, 1000002, 1000001, -1, 2000001, -2, 2000002, 3000002], [2000001, 3000002]));
-            $.$mol_assert_like(right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['foo', 777, 666, 'bar', 'yyy', 'zzz', '', 'xxx'], [-2, 1000002, 1000001, -2, 2000002, 3000002, -1, 2000001], [2000001, 3000002]));
-        },
-        'Merge increases versions in dicts'() {
-            const base = $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_list }).make();
-            const left = base.fork(1);
-            left.for('foo').insert('xxx');
-            const right = base.fork(2);
-            right.for('bar').insert(17);
-            right.for('bar').insert(18);
-            left.apply(right.delta());
-            left.for('foo').insert('yyy');
-            $.$mol_assert_like(left.delta(), $.$hyoo_crowd_delta(['foo', 'xxx', 'yyy', 'bar', 17, 18], [-2, 1000001, 3000001, -2, 1000002, 2000002], [2000002, 3000001]));
-        },
-        'Dictionary of Union'() {
-            const base = $.$hyoo_crowd_dict.of({
-                val: $.$hyoo_crowd_union.of({
-                    string: $.$hyoo_crowd_reg,
-                    array: $.$hyoo_crowd_list,
-                    object: $.$hyoo_crowd_set,
-                })
-            }).make();
-            const left = base.fork(1);
-            const right = base.fork(2);
-            left.for('foo').to('string').str('bar');
-            right.for('foo').to('array').insert('xxx');
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            $.$mol_assert_like(left.apply(right_delta).delta(), right.apply(left_delta).delta(), $.$hyoo_crowd_delta(['foo', 'array', 'xxx', 'bar'], [-3, -1000002, 2000002, 2000001], [2000001, 2000002]));
-        },
-        'Dictionary of Dictionary'() {
-            const base = $.$hyoo_crowd_dict.of({
-                val: $.$hyoo_crowd_dict.of({
-                    val: $.$hyoo_crowd_reg,
-                }),
-            }).make();
-            const left = base.fork(1);
-            const right = base.fork(2);
-            left.for('foo').for('xxx').str('321');
-            right.for('foo').for('yyy').str('123');
-            const left_delta = left.delta(base.clock);
-            const right_delta = right.delta(base.clock);
-            left.apply(right_delta);
-            right.apply(left_delta);
-            $.$mol_assert_like(left.for('foo').for('xxx').str(), right.for('foo').for('xxx').str(), '321');
-            $.$mol_assert_like(left.for('foo').for('yyy').str(), right.for('foo').for('yyy').str(), '123');
-        },
-        'Default tuple state'() {
-            const store = $.$hyoo_crowd_dict.of({
-                keys: $.$hyoo_crowd_list,
-                vals: $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_reg }),
-            }).make();
-            $.$mol_assert_like(store.for('keys').items(), []);
-            $.$mol_assert_like(store.for('vals').for('foo').str(), '');
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], [], []));
-        },
-        'Changed tuple state'() {
-            const Map = $.$hyoo_crowd_dict.of({
-                vers: $.$hyoo_crowd_numb,
-                keys: $.$hyoo_crowd_set,
-                vals: $.$hyoo_crowd_dict.of({ val: $.$hyoo_crowd_reg }),
+        'same list'() {
+            const list = $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "b"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "c"));
+            $.$mol_reconcile({
+                prev: [...list.children],
+                from: 0,
+                to: 3,
+                next: 'abc',
+                equal: (next, prev) => prev.textContent === next,
+                drop: (prev, lead) => list.removeChild(prev),
+                insert: (next, lead) => list.insertBefore($.$mol_jsx("p", { "data-rev": "new" }, next), lead ? lead.nextSibling : list.firstChild),
+                update: (next, prev, lead) => {
+                    prev.textContent = next;
+                    prev.setAttribute('data-rev', 'up');
+                    return prev;
+                },
             });
-            const store = Map.make().fork(1);
-            store.for('keys').add('foo').add('bar');
-            store.for('vals').for('xxx').str('yyy');
-            $.$mol_assert_like(store.for('vers').numb(), 0);
-            $.$mol_assert_like(store.for('keys').items, ['foo', 'bar']);
-            $.$mol_assert_like(store.for('vals').for('xxx').str(), 'yyy');
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(['keys', 'foo', 'bar', 'vals', 'xxx', 'yyy'], [-2, +1000001, +2000001, -2, -1, +3000001], [3000001]));
+            $.$mol_assert_dom(list, $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "b"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "c")));
         },
-        'Tuple of tuples'() {
-            const Point = $.$hyoo_crowd_dict.of({
-                X: $.$hyoo_crowd_numb,
-                Y: $.$hyoo_crowd_numb,
+        'insert items'() {
+            const list = $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "b"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "c"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "d"));
+            $.$mol_reconcile({
+                prev: [...list.children],
+                from: 1,
+                to: 3,
+                next: 'bXYc',
+                equal: (next, prev) => prev.textContent === next,
+                drop: (prev, lead) => list.removeChild(prev),
+                insert: (next, lead) => list.insertBefore($.$mol_jsx("p", { "data-rev": "new" }, next), lead ? lead.nextSibling : list.firstChild),
+                update: (next, prev, lead) => {
+                    prev.textContent = next;
+                    prev.setAttribute('data-rev', 'up');
+                    return prev;
+                },
             });
-            const Rect = $.$hyoo_crowd_dict.of({
-                TL: Point,
-                BR: Point,
+            $.$mol_assert_dom(list, $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "b"),
+                $.$mol_jsx("p", { "data-rev": "new" }, "X"),
+                $.$mol_jsx("p", { "data-rev": "new" }, "Y"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "c"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "d")));
+        },
+        'split item'() {
+            const list = $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "bc"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "d"));
+            $.$mol_reconcile({
+                prev: [...list.children],
+                from: 0,
+                to: 3,
+                next: 'abcd',
+                equal: (next, prev) => prev.textContent === next,
+                drop: (prev, lead) => list.removeChild(prev),
+                insert: (next, lead) => list.insertBefore($.$mol_jsx("p", { "data-rev": "new" }, next), lead ? lead.nextSibling : list.firstChild),
+                update: (next, prev, lead) => {
+                    prev.textContent = next;
+                    prev.setAttribute('data-rev', 'up');
+                    return prev;
+                },
             });
-            const store = Rect.make().fork(1);
-            store.for('TL').for('X').shift(-2);
-            store.for('TL').for('Y').shift(-3);
-            store.for('BR').for('X').shift(+5);
-            store.for('BR').for('Y').shift(+7);
-            $.$mol_assert_like(store.for('TL').for('X').numb(), -2);
-            $.$mol_assert_like(store.for('TL').for('Y').numb(), -3);
-            $.$mol_assert_like(store.for('BR').for('X').numb(), +5);
-            $.$mol_assert_like(store.for('BR').for('Y').numb(), +7);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta(["TL", "X", -2, "Y", -3, "BR", "X", +5, "Y", +7], [-4, -1, +1000001, -1, +2000001, -4, -1, +3000001, -1, +4000001], [4000001]));
+            $.$mol_assert_dom(list, $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "new" }, "b"),
+                $.$mol_jsx("p", { "data-rev": "up" }, "c"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "d")));
+        },
+        'drop items'() {
+            const list = $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "A"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "B"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "x"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "y"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "C"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "D"));
+            $.$mol_reconcile({
+                prev: [...list.children],
+                from: 1,
+                to: 5,
+                next: 'BC',
+                equal: (next, prev) => prev.textContent === next,
+                drop: (prev, lead) => list.removeChild(prev),
+                insert: (next, lead) => list.insertBefore($.$mol_jsx("p", { "data-rev": "new" }, next), lead ? lead.nextSibling : list.firstChild),
+                update: (next, prev, lead) => {
+                    prev.textContent = next;
+                    prev.setAttribute('data-rev', 'up');
+                    return prev;
+                },
+            });
+            $.$mol_assert_dom(list, $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "A"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "B"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "C"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "D")));
+        },
+        'update items'() {
+            const list = $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "B"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "C"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "d"));
+            $.$mol_reconcile({
+                prev: [...list.children],
+                from: 1,
+                to: 3,
+                next: 'XY',
+                equal: (next, prev) => prev.textContent === next,
+                drop: (prev, lead) => list.removeChild(prev),
+                insert: (next, lead) => list.insertBefore($.$mol_jsx("p", { "data-rev": "new" }, next), lead ? lead.nextSibling : list.firstChild),
+                update: (next, prev, lead) => {
+                    prev.textContent = next;
+                    prev.setAttribute('data-rev', 'up');
+                    return prev;
+                },
+            });
+            $.$mol_assert_dom(list, $.$mol_jsx("body", null,
+                $.$mol_jsx("p", { "data-rev": "old" }, "a"),
+                $.$mol_jsx("p", { "data-rev": "up" }, "X"),
+                $.$mol_jsx("p", { "data-rev": "up" }, "Y"),
+                $.$mol_jsx("p", { "data-rev": "old" }, "d")));
         },
     });
 })($ || ($ = {}));
-//dict.test.js.map
+//reconcile.test.js.map
 ;
 "use strict";
 //equals.test.js.map
@@ -3162,34 +2172,34 @@ var $;
 (function ($) {
     $.$mol_test({
         'empty string'() {
-            $.$mol_assert_like(''.match($.$hyoo_crowd_text_tokenizer), null);
+            $.$mol_assert_like(''.match($.$hyoo_crowd_tokenizer), null);
         },
         'new lines'() {
-            $.$mol_assert_like('\n\r\n'.match($.$hyoo_crowd_text_tokenizer), ['\n', '\r\n']);
+            $.$mol_assert_like('\n\r\n'.match($.$hyoo_crowd_tokenizer), ['\n', '\r\n']);
         },
         'numbers'() {
-            $.$mol_assert_like('123'.match($.$hyoo_crowd_text_tokenizer), ['123']);
+            $.$mol_assert_like('123'.match($.$hyoo_crowd_tokenizer), ['123']);
         },
         'emoji'() {
-            $.$mol_assert_like('😀😁'.match($.$hyoo_crowd_text_tokenizer), ['😀', '😁']);
+            $.$mol_assert_like('😀😁'.match($.$hyoo_crowd_tokenizer), ['😀', '😁']);
         },
         'emoji with modifier'() {
-            $.$mol_assert_like('👩🏿👩🏿'.match($.$hyoo_crowd_text_tokenizer), ['👩🏿', '👩🏿']);
+            $.$mol_assert_like('👩🏿👩🏿'.match($.$hyoo_crowd_tokenizer), ['👩🏿', '👩🏿']);
         },
         'combo emoji with modifier'() {
-            $.$mol_assert_like('👩🏿‍🤝‍🧑🏿👩🏿‍🤝‍🧑🏿'.match($.$hyoo_crowd_text_tokenizer), ['👩🏿‍🤝‍🧑🏿', '👩🏿‍🤝‍🧑🏿']);
+            $.$mol_assert_like('👩🏿‍🤝‍🧑🏿👩🏿‍🤝‍🧑🏿'.match($.$hyoo_crowd_tokenizer), ['👩🏿‍🤝‍🧑🏿', '👩🏿‍🤝‍🧑🏿']);
         },
         'word with spaces'() {
-            $.$mol_assert_like('foo1  bar2'.match($.$hyoo_crowd_text_tokenizer), ['foo1 ', ' ', 'bar2']);
+            $.$mol_assert_like('foo1  bar2'.match($.$hyoo_crowd_tokenizer), ['foo1 ', ' ', 'bar2']);
         },
         'word with diactric'() {
-            $.$mol_assert_like('Е́е́'.match($.$hyoo_crowd_text_tokenizer), ['Е́е́']);
+            $.$mol_assert_like('Е́е́'.match($.$hyoo_crowd_tokenizer), ['Е́е́']);
         },
         'word with punctuation'() {
-            $.$mol_assert_like('foo--bar'.match($.$hyoo_crowd_text_tokenizer), ['foo--', 'bar']);
+            $.$mol_assert_like('foo--bar'.match($.$hyoo_crowd_tokenizer), ['foo--', 'bar']);
         },
         'CamelCase'() {
-            $.$mol_assert_like('Foo1BAR2'.match($.$hyoo_crowd_text_tokenizer), ['Foo1', 'BAR2']);
+            $.$mol_assert_like('Foo1BAR2'.match($.$hyoo_crowd_tokenizer), ['Foo1', 'BAR2']);
         },
     });
 })($ || ($ = {}));
@@ -3200,200 +2210,375 @@ var $;
 (function ($) {
     $.$mol_test({
         'Default state'() {
-            const store = new $.$hyoo_crowd_text();
-            $.$mol_assert_like(store.text(), '');
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), null);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).bool(), false);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).numb(), 0);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).str(), '');
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), []);
+            $.$mol_assert_like(store.delta(), []);
         },
-        'Auto tokenize'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            $.$mol_assert_like(store.tokens.length, 2);
-            $.$mol_assert_like(store.text(), 'foo bar');
-            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +4000001]);
+        'Serial changes'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), null);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), []);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).bool(), false);
+            $.$hyoo_crowd_reg.for(store).bool(true);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), true);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), [true]);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).numb(), 1);
+            $.$hyoo_crowd_reg.for(store).numb(1);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), 1);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), [1]);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).str(), '1');
+            $.$hyoo_crowd_reg.for(store).str('x');
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), 'x');
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['x']);
+            $.$hyoo_crowd_reg.for(store).value(null);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), null);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), []);
+            $.$mol_assert_like(store.delta().map(chunk => chunk.data), [null]);
         },
-        'Replace with same tokens count'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            store.text('xxx yyy');
-            $.$mol_assert_like(store.tokens.length, 2);
-            $.$mol_assert_like(store.text(), 'xxx yyy');
-            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +4000001]);
+        'Name spaces'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            store.root.sub('foo', $.$hyoo_crowd_struct).sub('bar', $.$hyoo_crowd_reg).numb(111);
+            store.root.sub('foo', $.$hyoo_crowd_struct).sub('ton', $.$hyoo_crowd_reg).numb(222);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), []);
+            $.$mol_assert_like(store.root.sub('foo', $.$hyoo_crowd_list).list(), []);
+            $.$mol_assert_like(store.root.sub('foo', $.$hyoo_crowd_struct).sub('bar', $.$hyoo_crowd_list).list(), [111]);
+            $.$mol_assert_like(store.root.sub('foo', $.$hyoo_crowd_struct).sub('ton', $.$hyoo_crowd_list).list(), [222]);
         },
-        'Replace with more tokens count'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            store.text('foo de bar');
-            $.$mol_assert_like(store.tokens.length, 3);
-            $.$mol_assert_like(store.text(), 'foo de bar');
-            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +6000001, +4000001]);
-        },
-        'Replace with more tokens count with side changes'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo  bar');
-            store.text('foo de bar');
-            $.$mol_assert_like(store.tokens.length, 3);
-            $.$mol_assert_like(store.text(), 'foo de bar');
-            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +4000001, +6000001]);
-        },
-        'Space doubling'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            store.text('foo  bar');
-            $.$mol_assert_like(store.tokens.length, 3);
-            $.$mol_assert_like(store.text(), 'foo  bar');
-            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +6000001, +4000001]);
-        },
-        'Replace with less tokens count'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo de bar');
-            store.text('foo bar');
-            $.$mol_assert_like(store.tokens.length, 2);
-            $.$mol_assert_like(store.text(), 'foo bar');
-            $.$mol_assert_like(store.root.delta().stamps, [+2000001, +6000001, -7000001]);
-        },
-        'Cut from end'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            store.text('foo');
-            $.$mol_assert_like(store.text(), 'foo');
-            $.$mol_assert_like(store.tokens.length, 1);
-            $.$mol_assert_like(store.root.delta().stamps, [+2000001, -6000001]);
-        },
-        'Concurrent changes'() {
-            const base = new $.$hyoo_crowd_text();
-            base.text('Hello World and fun!');
-            const left = base.fork(1);
-            const right = base.fork(2);
-            left.text('Hello Alice and fun!');
-            right.text('Say: Hello World and fun!');
+        'Name spaces merging'() {
+            const left = new $.$hyoo_crowd_doc(123);
+            left.root.sub('foo', $.$hyoo_crowd_list).list([111]);
+            const right = new $.$hyoo_crowd_doc(234);
+            right.root.sub('foo', $.$hyoo_crowd_list).list([222]);
             const left_delta = left.delta();
             const right_delta = right.delta();
             left.apply(right_delta);
             right.apply(left_delta);
-            $.$mol_assert_equal(left.text(), right.text(), 'Say: Hello Alice and fun!');
+            $.$mol_assert_like(left.root.sub('foo', $.$hyoo_crowd_list).list(), right.root.sub('foo', $.$hyoo_crowd_list).list(), [222, 111]);
         },
-        'Splice inside token'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foobar');
-            store.write('XYZ', 2, 2);
-            $.$mol_assert_like(store.text(), 'foXYZar');
-            $.$mol_assert_like(store.tokens.length, 2);
+        'Ignore same changes'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_reg.for(store).str('foo');
+            const time = store.clock.now;
+            $.$hyoo_crowd_reg.for(store).str('foo');
+            $.$hyoo_crowd_list.for(store).list(['foo']);
+            $.$mol_assert_like(store.delta().map(chunk => chunk.time), [time]);
         },
-        'Splice over some tokens'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('xxx foo bar yyy');
-            store.write('X Y Z', 6, 3);
-            $.$mol_assert_like(store.text(), 'xxx foX Y Zar yyy');
-            $.$mol_assert_like(store.tokens.length, 6);
+        'Serial insert values'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_list.for(store).insert(['foo']);
+            $.$hyoo_crowd_list.for(store).insert(['bar']);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['foo', 'bar']);
         },
-        'Splice whole token'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('xxx foo yyy');
-            store.write('bar', 4, 4);
-            $.$mol_assert_like(store.text(), 'xxx baryyy');
-            $.$mol_assert_like(store.tokens.length, 2);
+        'Concurent insert values'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_list.for(store).insert(['foo'], 0);
+            $.$hyoo_crowd_list.for(store).insert(['bar'], 0);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['bar', 'foo']);
         },
-        'Splice whole text'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            store.write('xxx', 0, 7);
-            $.$mol_assert_like(store.text(), 'xxx');
-            $.$mol_assert_like(store.tokens.length, 1);
+        'Insert value between others'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_list.for(store).insert(['foo']);
+            $.$hyoo_crowd_list.for(store).insert(['bar']);
+            $.$hyoo_crowd_list.for(store).insert(['lol'], 1);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['foo', 'lol', 'bar']);
         },
-        'Splice at the end'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo');
-            store.write('xxx', 3);
-            $.$mol_assert_like(store.text(), 'fooxxx');
-            $.$mol_assert_like(store.tokens.length, 1);
+        'Insert value inside other'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_list.for(store).insert(['foo']);
+            store.root.nodes($.$hyoo_crowd_list)[0].insert(['bar']);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['foo']);
+            $.$mol_assert_like(store.root.nodes($.$hyoo_crowd_list)[0].list(), ['bar']);
         },
-        'Splice between tokens'() {
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            store.write('xxx', 4);
-            $.$mol_assert_like(store.text(), 'foo xxxbar');
-            $.$mol_assert_like(store.tokens.length, 2);
+        'Move existen Chunk'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foo.bar.lol.');
+            $.$hyoo_crowd_list.for(store).move(0, 2);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).text(), 'bar.foo.lol.');
+        },
+        'Deltas for different versions'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_list.for(store).list(['foo', 'bar', 'lol']);
+            $.$mol_assert_like(store.delta(new $.$hyoo_crowd_clock([
+                [321, 2],
+            ])).map(chunk => chunk.data), ['foo', 'bar', 'lol']);
+            const time = store.clock.now;
+            $.$mol_assert_like(store.delta(new $.$hyoo_crowd_clock([
+                [123, time - 3],
+            ])).map(chunk => chunk.data), ['foo', 'bar', 'lol']);
+            $.$mol_assert_like(store.delta(new $.$hyoo_crowd_clock([
+                [123, time - 2],
+            ])).map(chunk => chunk.data), ['bar', 'lol']);
+            $.$mol_assert_like(store.delta(new $.$hyoo_crowd_clock([
+                [123, time - 1],
+            ])).map(chunk => chunk.data), ['lol']);
+            $.$mol_assert_like(store.delta(new $.$hyoo_crowd_clock([
+                [123, time],
+            ])), []);
+        },
+        'Delete with subtree and ignore inserted into deleted'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foo');
+            const b2 = store.root.nodes($.$hyoo_crowd_text)[0];
+            b2.text('bar');
+            const b3 = b2.nodes($.$hyoo_crowd_text)[0];
+            b3.text('lol');
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), 'foo');
+            $.$mol_assert_like(b2.as($.$hyoo_crowd_reg).value(), 'bar');
+            $.$mol_assert_like(b3.as($.$hyoo_crowd_reg).value(), 'lol');
+            $.$hyoo_crowd_list.for(store).cut(0);
+            $.$mol_assert_like($.$hyoo_crowd_reg.for(store).value(), null);
+            $.$mol_assert_like(b2.as($.$hyoo_crowd_reg).value(), null);
+            $.$mol_assert_like(b3.as($.$hyoo_crowd_reg).value(), null);
+        },
+        'Put/get list'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), []);
+            $.$hyoo_crowd_list.for(store).list(['foo', 'bar', 'foo']);
+            const first = store.root.nodes($.$hyoo_crowd_list)[0];
+            first.list(['bar', 'foo', 'bar']);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['foo', 'bar', 'foo']);
+            $.$mol_assert_like(first.list(), ['bar', 'foo', 'bar']);
+        },
+        'Put/get text'() {
+            const store1 = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store1).text('foo bar foo');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store1).text(), 'foo bar foo');
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store1).list(), ['foo ', 'bar ', 'foo']);
+            const store2 = store1.fork(234);
+            $.$hyoo_crowd_text.for(store2).text('barFFFoo  bar');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store2).text(), 'barFFFoo  bar');
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store2).list(), ['bar', 'FFFoo ', ' ', 'bar']);
+        },
+        'Text modifications'() {
+            const store1 = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store1).text('foo bar');
+            const store2 = store1.fork(234);
+            $.$hyoo_crowd_text.for(store2).text('foo  bar');
+            $.$mol_assert_like(store1.root.chunks().map(chunk => chunk.self), [
+                store2.root.chunks()[0].self,
+                store2.root.chunks()[2].self,
+            ]);
+            const store3 = store2.fork(345);
+            $.$hyoo_crowd_text.for(store3).text('foo ton bar');
+            $.$mol_assert_like(store2.root.chunks().map(chunk => chunk.self), store3.root.chunks().map(chunk => chunk.self));
+            const store4 = store3.fork(456);
+            $.$hyoo_crowd_text.for(store4).text('foo bar');
+            $.$mol_assert_like([
+                store3.root.chunks()[0].self,
+                store3.root.chunks()[2].self,
+            ], store4.root.chunks().map(chunk => chunk.self));
+            const store5 = store3.fork(567);
+            $.$hyoo_crowd_text.for(store5).text('foo ');
+            $.$mol_assert_like([
+                store4.root.chunks()[0].self,
+            ], store5.root.chunks().map(chunk => chunk.self));
+        },
+        'Change sequences'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).text(), '');
+            $.$hyoo_crowd_text.for(store).text('foo');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).text(), 'foo');
+            $.$hyoo_crowd_text.for(store).text('foo bar');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).text(), 'foo bar');
+            $.$hyoo_crowd_text.for(store).text('foo lol bar');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).text(), 'foo lol bar');
+            $.$hyoo_crowd_text.for(store).text('lol bar');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).text(), 'lol bar');
+            $.$hyoo_crowd_text.for(store).text('foo bar');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).text(), 'foo bar');
+        },
+        'Merge different sequences'() {
+            const left = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(left).text('foo bar.');
+            const right = new $.$hyoo_crowd_doc(234);
+            $.$hyoo_crowd_text.for(right).text('xxx yyy.');
+            const left_delta = left.delta();
+            const right_delta = right.delta();
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'xxx yyy.foo bar.');
+        },
+        'Merge different insertions to same place of same sequence'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('foo bar');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left).text('foo xxx bar');
+            const right = base.fork(345);
+            $.$hyoo_crowd_text.for(right).text('foo yyy bar');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'foo yyy xxx bar');
+        },
+        'Insert after moved'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('foo bar zak');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left).text('foo xxx bar zak');
+            const right = base.fork(345);
+            right.insert(right.root.chunks()[0], 0, 2);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'xxx bar foo zak');
+        },
+        'Insert before moved left'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('foo bar zak');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left).text('foo xxx bar zak');
+            const right = base.fork(345);
+            right.insert(right.root.chunks()[1], 0, 0);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'bar foo xxx zak');
+        },
+        'Insert before moved right'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('foo bar.zak.');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left).text('foo xxx bar.zak.');
+            const right = base.fork(345);
+            right.insert(right.root.chunks()[1], 0, 3);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'foo xxx zak.bar.');
+        },
+        'Insert after removed'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('foo bar');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left).text('foo xxx bar');
+            const right = base.fork(345);
+            $.$hyoo_crowd_text.for(right).text('bar');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'xxx bar');
+        },
+        'Insert after removed out'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base, 111).text('foo bar|zak');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left, 111).text('foo bar|xxx zak');
+            const right = base.fork(345);
+            right.insert($.$hyoo_crowd_node.for(right, 111).chunks()[1], 222, 0);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left, 111).text(), $.$hyoo_crowd_text.for(right, 111).text(), 'foo xxx zak');
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left, 222).text(), $.$hyoo_crowd_text.for(right, 222).text(), 'bar|');
+        },
+        'Insert before changed'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('xxx yyy zzz');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left).text('xxx foo yyy zzz');
+            const right = base.fork(345);
+            $.$hyoo_crowd_text.for(right).text('xxx bar zzz');
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'xxx bar foo zzz');
+        },
+        'Insert between moved'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('111 222 333 444 555 666');
+            const left = base.fork(234);
+            $.$hyoo_crowd_text.for(left).text('111 222 xxx 333 444 555 666');
+            const right = base.fork(345);
+            right.insert(right.root.chunks()[1], 0, 5);
+            right.insert(right.root.chunks()[1], 0, 5);
+            const left_delta = left.delta(base.clock);
+            const right_delta = right.delta(base.clock);
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), '111 444 555 222 333 xxx 666');
+        },
+        'Merge text changes'() {
+            const base = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(base).text('Hello World and fun!');
+            const left = base.fork(234);
+            const right = base.fork(345);
+            $.$hyoo_crowd_text.for(left).text('Hello Alice and fun!');
+            $.$hyoo_crowd_text.for(right).text('Bye World and fun!');
+            const left_delta = left.delta();
+            const right_delta = right.delta();
+            left.apply(right_delta);
+            right.apply(left_delta);
+            $.$mol_assert_equal($.$hyoo_crowd_text.for(left).text(), $.$hyoo_crowd_text.for(right).text(), 'Bye Alice and fun!');
+        },
+        'Write into token'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foobar');
+            $.$hyoo_crowd_text.for(store).write('xyz', 3);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['fooxyzbar']);
+        },
+        'Write into token with split'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foobar');
+            $.$hyoo_crowd_text.for(store).write('XYZ', 2, 4);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['fo', 'XYZar']);
+        },
+        'Write over few tokens'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('xxx foo bar yyy');
+            $.$hyoo_crowd_text.for(store).write('X Y Z', 6, 9);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['xxx ', 'fo', 'X ', 'Y ', 'Zar ', 'yyy']);
+        },
+        'Write whole token'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('xxxFoo yyy');
+            $.$hyoo_crowd_text.for(store).write('bar', 3, 7);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['xxxbaryyy']);
+        },
+        'Write whole text'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foo bar');
+            $.$hyoo_crowd_text.for(store).write('xxx', 0, 7);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['xxx']);
+        },
+        'Write at the end'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foo');
+            $.$hyoo_crowd_text.for(store).write('bar');
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['foobar']);
+        },
+        'Write between tokens'() {
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foo bar');
+            $.$hyoo_crowd_text.for(store).write('xxx', 4);
+            $.$mol_assert_like($.$hyoo_crowd_list.for(store).list(), ['foo ', 'xxxbar']);
         },
         'Offset <=> path'() {
-            const obj = { foo: 1, bar: 2 };
-            const { foo, ...restObjectItems } = obj;
-            const store = new $.$hyoo_crowd_text().fork(1);
-            store.text('foo bar');
-            $.$mol_assert_like(store.point_by_offset(0), [store.tokens[0], 0]);
-            $.$mol_assert_like(store.offset_by_point([store.tokens[0], 0]), 0);
-            $.$mol_assert_like(store.point_by_offset(4), [store.tokens[1], 0]);
-            $.$mol_assert_like(store.offset_by_point([store.tokens[1], 0]), 4);
-            $.$mol_assert_like(store.point_by_offset(6), [store.tokens[1], 2]);
-            $.$mol_assert_like(store.offset_by_point([store.tokens[1], 2]), 6);
-            $.$mol_assert_like(store.point_by_offset(7), [0, 0]);
-            $.$mol_assert_like(store.offset_by_point([0, 0]), 7);
+            const store = new $.$hyoo_crowd_doc(123);
+            $.$hyoo_crowd_text.for(store).text('foo bar');
+            const [first, second] = store.root.chunks();
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).point_by_offset(0), { chunk: first.self, offset: 0 });
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).offset_by_point({ chunk: first.self, offset: 0 }), 0);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).point_by_offset(4), { chunk: second.self, offset: 0 });
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).offset_by_point({ chunk: second.self, offset: 0 }), 4);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).point_by_offset(6), { chunk: second.self, offset: 2 });
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).offset_by_point({ chunk: second.self, offset: 2 }), 6);
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).point_by_offset(7), { chunk: store.root.head, offset: 7 });
+            $.$mol_assert_like($.$hyoo_crowd_text.for(store).offset_by_point({ chunk: store.root.head, offset: 7 }), 7);
         },
     });
 })($ || ($ = {}));
-//text.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'Default data'() {
-            const store = $.$hyoo_crowd_graph.make();
-            $.$mol_assert_equal(store.value('foo'), null);
-            $.$mol_assert_like(store.delta(), $.$hyoo_crowd_delta([], [], []));
-        },
-        'Changed values'() {
-            const store = $.$hyoo_crowd_graph.make();
-            store.value('null', null);
-            store.value('bool', false);
-            store.value('numb', 0);
-            store.value('text', '');
-            store.value('list', ['foo', 'bar']);
-            $.$mol_assert_equal(store.value('null'), null);
-            $.$mol_assert_equal(store.value('bool'), false);
-            $.$mol_assert_equal(store.value('numb'), 0);
-            $.$mol_assert_equal(store.value('text'), '');
-            $.$mol_assert_like(store.value('list'), ['foo', 'bar']);
-        },
-        'Graph representation'() {
-            const store = $.$hyoo_crowd_graph.make();
-            store.edge('A/out', ['B', 'C']);
-            store.edge('B/in', ['A']);
-            store.edge('B/out', ['C']);
-            store.edge('C/in', ['A', 'B']);
-            $.$mol_assert_equal(store.edge(store.edge('A/out')[0] + '/out')[0], 'C');
-        },
-    });
-})($ || ($ = {}));
-//graph.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test_mocks.push(context => {
-        context.$mol_store_local = new $.$mol_store({});
-    });
-})($ || ($ = {}));
-//local.mock.test.js.map
-;
-"use strict";
-var $;
-(function ($_1) {
-    $_1.$mol_test({
-        'get/set/delete'() {
-            var key = '$mol_store_local_test';
-            $_1.$mol_assert_equal($_1.$mol_store_local.value(key), null);
-            $_1.$mol_store_local.value(key, 123);
-            $_1.$mol_assert_equal($_1.$mol_store_local.value(key), 123);
-            $_1.$mol_store_local.value(key, null);
-            $_1.$mol_assert_equal($_1.$mol_store_local.value(key), null);
-        },
-        'mocked'($) {
-            var key = '$mol_store_local_test';
-            $.$mol_store_local.value(key, 321);
-            $_1.$mol_assert_unique($_1.$mol_store_local.value(key), 321);
-        },
-    });
-})($ || ($ = {}));
-//local.test.js.map
+//doc.test.js.map
 ;
 "use strict";
 var $;
@@ -3410,6 +2595,10 @@ var $;
         },
         'format typed'() {
             $.$mol_assert_equal(new $.$mol_time_duration('P1Y2M3DT4h5m6s').toString('P#Y#M#DT#h#m#s'), 'P1Y2M3DT4H5M6S');
+        },
+        'comparison'() {
+            const iso = 'P1Y1M1DT1h1m1s';
+            $.$mol_assert_like(new $.$mol_time_duration(iso), new $.$mol_time_duration(iso));
         },
     });
 })($ || ($ = {}));
@@ -3466,7 +2655,11 @@ var $;
         },
         'change offset'() {
             $.$mol_assert_equal(new $.$mol_time_moment('2021-04-10 +03:00').toOffset('Z').toString(), '2021-04-09T21:00:00+00:00');
-        }
+        },
+        'comparison'() {
+            const iso = '2021-01-02T03:04:05.678+09:10';
+            $.$mol_assert_like(new $.$mol_time_moment(iso), new $.$mol_time_moment(iso));
+        },
     });
 })($ || ($ = {}));
 //moment.test.js.map
@@ -3535,77 +2728,16 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    $.$mol_test_mocks.push(context => {
-        class $mol_state_local_mock extends $.$mol_state_local {
-            static value(key, next = this.state[key], force) {
-                return this.state[key] = (next || null);
-            }
-        }
-        $mol_state_local_mock.state = {};
-        __decorate([
-            $.$mol_mem_key
-        ], $mol_state_local_mock, "value", null);
-        context.$mol_state_local = $mol_state_local_mock;
-    });
-})($ || ($ = {}));
-//local.mock.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'local get set delete'() {
-            var key = '$mol_state_local_test:' + Math.random();
-            $.$mol_assert_equal($.$mol_state_local.value(key), null);
-            $.$mol_state_local.value(key, 123);
-            $.$mol_assert_equal($.$mol_state_local.value(key), 123);
-            $.$mol_state_local.value(key, null);
-            $.$mol_assert_equal($.$mol_state_local.value(key), null);
-        },
-    });
-})($ || ($ = {}));
-//local.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'decode utf8 string'() {
-            const str = 'Hello, ΧΨΩЫ';
-            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
-            $.$mol_assert_equal($.$mol_charset_decode(encoded), str);
-            $.$mol_assert_equal($.$mol_charset_decode(encoded, 'utf8'), str);
-        },
-        'decode empty string'() {
-            const encoded = new Uint8Array([]);
-            $.$mol_assert_equal($.$mol_charset_decode(encoded), '');
-        },
-    });
-})($ || ($ = {}));
-//decode.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'encode utf8 string'() {
-            const str = 'Hello, ΧΨΩЫ';
-            const encoded = new Uint8Array([72, 101, 108, 108, 111, 44, 32, 206, 167, 206, 168, 206, 169, 208, 171]);
-            $.$mol_assert_like($.$mol_charset_encode(str), encoded);
-        },
-    });
-})($ || ($ = {}));
-//encode.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
     $.$mol_test({
         'triplets'() {
             $.$mol_assert_equal(new $.$mol_time_interval('2015-01-01/P1M').end.toString(), '2015-02-01');
             $.$mol_assert_equal(new $.$mol_time_interval('P1M/2015-02-01').start.toString(), '2015-01-01');
             $.$mol_assert_equal(new $.$mol_time_interval('2015-01-01/2015-02-01').duration.toString(), 'PT2678400S');
-        }
+        },
+        'comparison'() {
+            const iso = '2021-01-02/2022-03-04';
+            $.$mol_assert_like(new $.$mol_time_interval(iso), new $.$mol_time_interval(iso));
+        },
     });
 })($ || ($ = {}));
 //interval.test.js.map
@@ -3623,12 +2755,93 @@ var $;
 ;
 "use strict";
 var $;
+(function ($) {
+    var $$;
+    (function ($$) {
+        $.$mol_test({
+            'Empty needle'() {
+                const app = new $$.$mol_dimmer;
+                app.needle = () => '  ';
+                app.haystack = () => 'foo  bar';
+                $.$mol_assert_like(app.strings(), ['foo  bar']);
+            },
+            'Empty haystack'() {
+                const app = new $$.$mol_dimmer;
+                app.needle = () => 'foo  bar';
+                app.haystack = () => '';
+                $.$mol_assert_like(app.strings(), ['']);
+            },
+            'Not found'() {
+                const app = new $$.$mol_dimmer;
+                app.needle = () => 'foo';
+                app.haystack = () => ' bar ';
+                $.$mol_assert_like(app.strings(), [' bar ']);
+            },
+            'One found'() {
+                const app = new $$.$mol_dimmer;
+                app.needle = () => 'foo';
+                app.haystack = () => ' barfoo ';
+                $.$mol_assert_like(app.strings(), [' bar', 'foo', ' ']);
+            },
+            'Multiple found'() {
+                const app = new $$.$mol_dimmer;
+                app.needle = () => 'foo';
+                app.haystack = () => ' foobarfoo foo';
+                $.$mol_assert_like(app.strings(), [' ', 'foo', 'bar', 'foo', ' ', 'foo']);
+            },
+            'Fuzzy search'() {
+                const app = new $$.$mol_dimmer;
+                app.needle = () => 'foo bar';
+                app.haystack = () => ' barfoo ';
+                $.$mol_assert_like(app.strings(), [' ', 'bar', '', 'foo', ' ']);
+            },
+        });
+    })($$ = $.$$ || ($.$$ = {}));
+})($ || ($ = {}));
+//dimmer.test.js.map
+;
+"use strict";
+var $;
+(function ($) {
+    $.$mol_test({
+        '$mol_syntax2_md_flow'() {
+            const check = (input, right) => {
+                const tokens = [];
+                $.$mol_syntax2_md_flow.tokenize(input, (...token) => tokens.push(token));
+                $.$mol_assert_like(JSON.stringify(tokens), JSON.stringify(right));
+            };
+            check('Hello,\nWorld..\r\n\r\n\nof Love!', [
+                ['block', 'Hello,\nWorld..\r\n\r\n\n', ['Hello,\nWorld..', '\r\n\r\n\n'], 0],
+                ['block', 'of Love!', ['of Love!', ''], 19],
+            ]);
+            check('# Header1\n\nHello!\n\n## Header2', [
+                ['header', '# Header1\n\n', ['#', ' ', 'Header1', '\n\n'], 0],
+                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 11],
+                ['header', '## Header2', ['##', ' ', 'Header2', ''], 19],
+            ]);
+            check('```\nstart()\n```\n\n```jam.js\nrestart()\n```\n\nHello!\n\n```\nstop()\n```', [
+                ['code', '```\nstart()\n```\n\n', ['```', '', 'start()\n', '```', '\n\n'], 0],
+                ['code', '```jam.js\nrestart()\n```\n\n', ['```', 'jam.js', 'restart()\n', '```', '\n\n'], 17],
+                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 42],
+                ['code', '```\nstop()\n```', ['```', '', 'stop()\n', '```', ''], 50],
+            ]);
+            check('| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n| Cell11 | Cell12\n| Cell21 | Cell22\n', [
+                ['table', '| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n', ['| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n', '\n'], 0],
+                ['table', '| Cell11 | Cell12\n| Cell21 | Cell22\n', ['| Cell11 | Cell12\n| Cell21 | Cell22\n', ''], 68],
+            ]);
+        },
+    });
+})($ || ($ = {}));
+//md.test.js.map
+;
+"use strict";
+var $;
 (function ($_1) {
     $_1.$mol_test_mocks.push(context => {
         class $mol_state_arg_mock extends $_1.$mol_state_arg {
+            static $ = context;
             static href(next) { return next || ''; }
         }
-        $mol_state_arg_mock.$ = context;
         __decorate([
             $_1.$mol_mem
         ], $mol_state_arg_mock, "href", null);
@@ -3658,8 +2871,8 @@ var $;
                 constructor(prefix) {
                     super(base.prefix + prefix);
                 }
+                static value = (key, next) => base.value(key, next);
             }
-            Nested.value = (key, next) => base.value(key, next);
             $.$mol_state_arg.href('#!foo=bar/nested.xxx=123');
             $_1.$mol_assert_equal(Nested.value('foo'), null);
             $_1.$mol_assert_equal(Nested.value('xxx'), '123');
@@ -3669,40 +2882,6 @@ var $;
     });
 })($ || ($ = {}));
 //arg.web.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        '$mol_syntax2_md_flow'() {
-            const check = (input, right) => {
-                const tokens = [];
-                $.$mol_syntax2_md_flow.tokenize(input, (...token) => tokens.push(token));
-                $.$mol_assert_like(JSON.stringify(tokens), JSON.stringify(right));
-            };
-            check('Hello,\nWorld..\r\n\r\n\nof Love!', [
-                ['block', 'Hello,\nWorld..\r\n\r\n\n', ['Hello,\nWorld..', '\r\n\r\n\n'], 0],
-                ['block', 'of Love!', ['of Love!', ''], 19],
-            ]);
-            check('# Header1\n\nHello!\n\n## Header2', [
-                ['header', '# Header1\n\n', ['#', ' ', 'Header1', '\n\n'], 0],
-                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 11],
-                ['header', '## Header2', ['##', ' ', 'Header2', ''], 19],
-            ]);
-            check('```\nstart()\n```\n\n```js\nrestart()\n```\n\nHello!\n\n```\nstop()\n```', [
-                ['code', '```\nstart()\n```\n\n', ['```', '', 'start()\n', '```', '\n\n'], 0],
-                ['code', '```js\nrestart()\n```\n\n', ['```', 'js', 'restart()\n', '```', '\n\n'], 17],
-                ['block', 'Hello!\n\n', ['Hello!', '\n\n'], 38],
-                ['code', '```\nstop()\n```', ['```', '', 'stop()\n', '```', ''], 46],
-            ]);
-            check('| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n| Cell11 | Cell12\n| Cell21 | Cell22\n', [
-                ['table', '| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n\n', ['| header1 | header2\n|----|----\n| Cell11 | Cell12\n| Cell21 | Cell22\n', '\n'], 0],
-                ['table', '| Cell11 | Cell12\n| Cell21 | Cell22\n', ['| Cell11 | Cell12\n| Cell21 | Cell22\n', ''], 68],
-            ]);
-        },
-    });
-})($ || ($ = {}));
-//md.test.js.map
 ;
 "use strict";
 var $;
@@ -3946,10 +3125,10 @@ var $;
         'errors handling'($) {
             const errors = [];
             class Tree extends $_1.$mol_tree {
+                static $ = $.$mol_ambient({
+                    $mol_fail: error => errors.push(error.message)
+                });
             }
-            Tree.$ = $.$mol_ambient({
-                $mol_fail: error => errors.push(error.message)
-            });
             Tree.fromString(`
 				\t \tfoo
 				bar \\data
@@ -3965,6 +3144,13 @@ var $;
 (function ($) {
     $.$mol_tree_convert = Symbol('$mol_tree_convert');
     class $mol_tree extends $.$mol_object2 {
+        type;
+        data;
+        sub;
+        baseUri;
+        row;
+        col;
+        length;
         constructor(config = {}) {
             super();
             this.type = config.type || '';
@@ -4571,235 +3757,72 @@ var $;
 var $;
 (function ($) {
     $.$mol_test({
-        'Attach to document'() {
-            const doc = $.$mol_dom_parse('<html><body id="/foo"></body></html>');
-            $.$mol_jsx_attach(doc, () => $.$mol_jsx("body", { id: "/foo" }, "bar"));
-            $.$mol_assert_equal(doc.documentElement.outerHTML, '<html><body id="/foo">bar</body></html>');
-        },
-    });
-})($ || ($ = {}));
-//attach.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    function $mol_jsx_attach(next, action) {
-        const prev = $.$mol_jsx_document;
-        try {
-            $.$mol_jsx_document = next;
-            return action();
-        }
-        finally {
-            $.$mol_jsx_document = prev;
-        }
-    }
-    $.$mol_jsx_attach = $mol_jsx_attach;
-})($ || ($ = {}));
-//attach.js.map
-;
-"use strict";
-var $;
-(function ($_1) {
-    $_1.$mol_test({
-        'Class as component'() {
-            class Foo extends $_1.$mol_jsx_view {
-                constructor() {
-                    super(...arguments);
-                    this.title = '';
-                }
-                render() {
-                    return $_1.$mol_jsx("div", null,
-                        this.title,
-                        " ",
-                        this.childNodes.join('-'));
-                }
-            }
-            const dom = $_1.$mol_jsx(Foo, { id: "/foo", title: "bar" },
-                "xxx",
-                123);
-            $_1.$mol_assert_equal(dom.outerHTML, '<div id="/foo">bar xxx-123</div>');
-        },
-        'View by element'() {
-            class Br extends $_1.$mol_jsx_view {
-                render() {
-                    view = this;
-                    return $_1.$mol_jsx("br", { id: "/foo" });
-                }
-            }
-            let view;
-            $_1.$mol_assert_equal(Br.of($_1.$mol_jsx(Br, null)), view);
-        },
-        'Attached view rerender'() {
-            const doc = $_1.$mol_dom_parse('<html><body id="/foo"></body></html>');
-            class Title extends $_1.$mol_jsx_view {
-                constructor() {
-                    super(...arguments);
-                    this.value = 'foo';
-                }
-                render() {
-                    return $_1.$mol_jsx("div", null, this.value);
-                }
-            }
-            const dom = $_1.$mol_jsx_attach(doc, () => $_1.$mol_jsx(Title, { id: "/foo" }));
-            const title = Title.of(dom);
-            $_1.$mol_assert_equal(title.ownerDocument, doc);
-            $_1.$mol_assert_equal(doc.documentElement.outerHTML, '<html><body id="/foo">foo</body></html>');
-            title.value = 'bar';
-            title.valueOf();
-            $_1.$mol_assert_equal(doc.documentElement.outerHTML, '<html><body id="/foo">bar</body></html>');
-        },
-        async 'Reactive attached view'($) {
-            const doc = $_1.$mol_dom_parse('<html><body id="/foo"></body></html>');
-            class Task extends $_1.$mol_object2 {
-                title(next) { return next || 'foo'; }
-            }
-            __decorate([
-                $_1.$mol_mem
-            ], Task.prototype, "title", null);
-            class App extends $_1.$mol_jsx_view {
-                task() { return new Task; }
-                valueOf() {
-                    return super.valueOf();
-                }
-                render() {
-                    return $_1.$mol_jsx("div", null, this.task().title());
-                }
-            }
-            __decorate([
-                $_1.$mol_mem
-            ], App.prototype, "task", null);
-            __decorate([
-                $_1.$mol_mem
-            ], App.prototype, "valueOf", null);
-            const task = new Task;
-            task.$ = $;
-            const autorun = $.$mol_atom2_autorun(() => $_1.$mol_jsx_attach(doc, () => $_1.$mol_jsx(App, { "$": $, id: "/foo", task: () => task })));
-            autorun.$ = $;
-            await $_1.$mol_fiber_warp();
-            $_1.$mol_assert_equal(doc.documentElement.outerHTML, '<html><body id="/foo">foo</body></html>');
-            task.title('bar');
-            await $_1.$mol_fiber_warp();
-            $_1.$mol_assert_equal(doc.documentElement.outerHTML, '<html><body id="/foo">bar</body></html>');
-        },
-    });
-})($ || ($ = {}));
-//view.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class $mol_jsx_view extends $.$mol_object2 {
-        static of(node) {
-            return node[this];
-        }
-        valueOf() {
-            const prefix = $.$mol_jsx_prefix;
-            const booked = $.$mol_jsx_booked;
-            const document = $.$mol_jsx_document;
+        async 'unique index'() {
+            const db = await $.$$.$mol_db('$mol_db_test', mig => mig.store_make('users'), mig => mig.stores.users.index_make('names', ['name'], !!'unique'));
+            const trans = db.change('users');
             try {
-                $.$mol_jsx_prefix = this[Symbol.toStringTag];
-                $.$mol_jsx_booked = new Set;
-                $.$mol_jsx_document = this.ownerDocument;
-                return this.render();
+                const { users } = trans.stores;
+                await users.put({ name: 'Jin' }, 'jin');
+                await users.put({ name: 'John' }, 'john');
+                await users.put({ name: 'Bin' }, 'bin');
+                const { names } = users.indexes;
+                $.$mol_assert_like(await names.get(['Jin']), { name: 'Jin' });
+                $.$mol_assert_like(await names.get(['John']), { name: 'John' });
+                $.$mol_assert_like(await names.count(), 3);
+                $.$mol_assert_like(await names.select(IDBKeyRange.bound(['J'], ['J\uFFFF'])), [{ name: 'Jin' }, { name: 'John' }]);
+                try {
+                    await users.put({ name: 'Jin' }, 'jin2');
+                    $.$mol_fail(new Error('Exception expected'));
+                }
+                catch (error) {
+                    $.$mol_assert_unique(error.message, 'Exception expected');
+                }
             }
             finally {
-                $.$mol_jsx_prefix = prefix;
-                $.$mol_jsx_booked = booked;
-                $.$mol_jsx_document = document;
+                trans.abort();
+                db.kill();
             }
-        }
-        render() {
-            return $.$mol_fail(new Error('dom_tree() not implemented'));
-        }
-    }
-    Symbol.toStringTag;
-    $.$mol_jsx_view = $mol_jsx_view;
-})($ || ($ = {}));
-//view.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    $.$mol_test({
-        'equal paths'() {
-            const diff = $.$mol_diff_path([1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4]);
-            $.$mol_assert_like(diff, {
-                prefix: [1, 2, 3, 4],
-                suffix: [[], [], []],
-            });
         },
-        'different suffix'() {
-            const diff = $.$mol_diff_path([1, 2, 3, 4], [1, 2, 3, 5], [1, 2, 5, 4]);
-            $.$mol_assert_like(diff, {
-                prefix: [1, 2],
-                suffix: [[3, 4], [3, 5], [5, 4]],
-            });
+        async 'multi path index'() {
+            const db = await $.$$.$mol_db('$mol_db_test', mig => mig.store_make('users'), mig => mig.stores.users.index_make('names', ['first', 'last']));
+            const trans = db.change('users');
+            try {
+                const { users } = trans.stores;
+                await users.put({ first: 'Jin', last: 'Johnson' }, 'jin');
+                await users.put({ first: 'John', last: 'Jinson' }, 'john');
+                await users.put({ first: 'Bond', last: 'James' }, '007');
+                const { names } = users.indexes;
+                $.$mol_assert_like(await names.get(['Jin', 'Johnson']), { first: 'Jin', last: 'Johnson' });
+                $.$mol_assert_like(await names.get(['John', 'Jinson']), { first: 'John', last: 'Jinson' });
+                $.$mol_assert_like(await names.count(), 3);
+                $.$mol_assert_like(await names.select(IDBKeyRange.bound(['Jin', 'Johnson'], ['John', 'Jinson'])), [{ first: 'Jin', last: 'Johnson' }, { first: 'John', last: 'Jinson' }]);
+            }
+            finally {
+                trans.abort();
+                db.kill();
+            }
         },
-        'one contains other'() {
-            const diff = $.$mol_diff_path([1, 2, 3, 4], [1, 2], [1, 2, 3]);
-            $.$mol_assert_like(diff, {
-                prefix: [1, 2],
-                suffix: [[3, 4], [], [3]],
-            });
-        },
-        'fully different'() {
-            const diff = $.$mol_diff_path([1, 2], [3, 4], [5, 6]);
-            $.$mol_assert_like(diff, {
-                prefix: [],
-                suffix: [[1, 2], [3, 4], [5, 6]],
-            });
+        async 'multiple indexes'() {
+            const db = await $.$$.$mol_db('$mol_db_test', mig => mig.store_make('users'), mig => mig.stores.users.index_make('names', ['name'], !!'unique'), mig => mig.stores.users.index_make('ages', ['age']));
+            const trans = db.change('users');
+            try {
+                const { users } = trans.stores;
+                await users.put({ name: 'Jin', age: 18 }, 'jin');
+                await users.put({ name: 'John', age: 18 }, 'john');
+                const { names, ages } = users.indexes;
+                $.$mol_assert_like(await names.select(['Jin']), [{ name: 'Jin', age: 18 }]);
+                $.$mol_assert_like(await names.select(['John']), [{ name: 'John', age: 18 }]);
+                $.$mol_assert_like(await names.count(), 2);
+                $.$mol_assert_like(await ages.select([18]), [{ name: 'Jin', age: 18 }, { name: 'John', age: 18 }]);
+                $.$mol_assert_like(await ages.count(), 2);
+            }
+            finally {
+                trans.abort();
+                db.kill();
+            }
         },
     });
 })($ || ($ = {}));
-//path.test.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    function $mol_diff_path(...paths) {
-        const limit = Math.min(...paths.map(path => path.length));
-        lookup: for (var i = 0; i < limit; ++i) {
-            const first = paths[0][i];
-            for (let j = 1; j < paths.length; ++j) {
-                if (paths[j][i] !== first)
-                    break lookup;
-            }
-        }
-        return {
-            prefix: paths[0].slice(0, i),
-            suffix: paths.map(path => path.slice(i)),
-        };
-    }
-    $.$mol_diff_path = $mol_diff_path;
-})($ || ($ = {}));
-//path.js.map
-;
-"use strict";
-var $;
-(function ($) {
-    class $mol_error_mix extends Error {
-        constructor(message, ...errors) {
-            super(message);
-            this.errors = errors;
-            if (errors.length) {
-                const stacks = [...errors.map(error => error.stack), this.stack];
-                const diff = $.$mol_diff_path(...stacks.map(stack => {
-                    if (!stack)
-                        return [];
-                    return stack.split('\n').reverse();
-                }));
-                const head = diff.prefix.reverse().join('\n');
-                const tails = diff.suffix.map(path => path.reverse().map(line => line.replace(/^(?!\s+at)/, '\tat (.) ')).join('\n')).join('\n\tat (.) -----\n');
-                this.stack = `Error: ${this.constructor.name}\n\tat (.) /"""\\\n${tails}\n\tat (.) \\___/\n${head}`;
-                this.message += errors.map(error => '\n' + error.message).join('');
-            }
-        }
-        toJSON() {
-            return this.message;
-        }
-    }
-    $.$mol_error_mix = $mol_error_mix;
-})($ || ($ = {}));
-//mix.js.map
+//index.test.js.map
 
 //# sourceMappingURL=web.test.js.map
