@@ -334,17 +334,14 @@ declare namespace $ {
         cache: Result | Error | Promise<Result | Error>;
         get args(): Args;
         result(): Result | undefined;
-        persistent(): boolean;
         field(): string;
         constructor(id: string, task: (this: Host, ...args: Args) => Result, host?: Host | undefined, ...args: Args);
-        destructor(): void;
         plan(): void;
         reap(): void;
         toString(): any;
         toJSON(): any;
         get $(): any;
         emit(quant?: $mol_wire_cursor): void;
-        commit(): void;
         refresh(): void;
         put(next: Result | Error | Promise<Result | Error>): Result | Error | Promise<Result | Error>;
         sync(): Awaited<Result>;
@@ -352,10 +349,13 @@ declare namespace $ {
     }
     class $mol_wire_fiber_temp<Host, Args extends readonly unknown[], Result> extends $mol_wire_fiber<Host, Args, Result> {
         static getter<Host, Args extends readonly unknown[], Result>(task: (this: Host, ...args: Args) => Result): (host: Host, args: Args) => $mol_wire_fiber_temp<Host, [...Args], Result>;
+        commit(): void;
     }
     class $mol_wire_fiber_persist<Host, Args extends readonly unknown[], Result> extends $mol_wire_fiber<Host, Args, Result> {
         static getter<Host, Args extends readonly unknown[], Result>(task: (this: Host, ...args: Args) => Result, keys: number): (host: Host, args: Args) => $mol_wire_fiber_persist<Host, [...Args], Result>;
-        recall(...args: Args): Result;
+        recall(...args: Args): Error | Result | Promise<Error | Result>;
+        commit(): void;
+        destructor(): void;
     }
 }
 
@@ -720,6 +720,19 @@ declare namespace $ {
 }
 
 declare namespace $ {
+    class $mol_plugin extends $mol_view {
+        dom_node(next?: Element): Element;
+        attr_static(): {
+            [key: string]: string | number | boolean;
+        };
+        event(): {
+            [key: string]: (event: Event) => void;
+        };
+        render(): void;
+    }
+}
+
+declare namespace $ {
     function $mol_style_define<Component extends $mol_view, Config extends $mol_style_guard<Component, Config>>(Component: new () => Component, config: Config): HTMLStyleElement | null;
 }
 
@@ -881,6 +894,30 @@ declare namespace $ {
 }
 
 declare namespace $ {
+    class $mol_db_index<Schema extends $mol_db_index_schema> {
+        readonly native: IDBIndex;
+        constructor(native: IDBIndex);
+        get name(): string;
+        get paths(): string[];
+        get unique(): boolean;
+        get multiple(): boolean;
+        get store(): $mol_db_store<$mol_db_store_schema>;
+        get transaction(): $mol_db_transaction<$mol_db_schema>;
+        get db(): $mol_db_database<$mol_db_schema>;
+        count(keys?: Schema['Key'] | IDBKeyRange): Promise<number>;
+        get(key: Schema['Key']): Promise<Schema["Doc"] | undefined>;
+        select(key?: Schema['Key'] | IDBKeyRange | null, count?: number): Promise<Schema["Doc"][]>;
+    }
+}
+
+declare namespace $ {
+    type $mol_db_index_schema = {
+        Key: IDBValidKey[];
+        Doc: unknown;
+    };
+}
+
+declare namespace $ {
     function $mol_db<Schema extends $mol_db_schema>(this: $, name: string, ...migrations: ((transaction: $mol_db_transaction<$mol_db_schema>) => void)[]): Promise<$mol_db_database<Schema>>;
 }
 
@@ -1024,6 +1061,28 @@ declare namespace $ {
 }
 
 declare namespace $ {
+    function $mol_reconcile<Prev, Next>({ prev, from, to, next, equal, drop, insert, update, }: {
+        prev: readonly Prev[];
+        from: number;
+        to: number;
+        next: ArrayLike<Next>;
+        equal: (next: Next, prev: Prev) => boolean;
+        drop: (prev: Prev, lead: Prev | null) => Prev | null;
+        insert: (next: Next, lead: Prev | null) => Prev;
+        update: (next: Next, prev: Prev, lead: Prev | null) => Prev;
+    }): void;
+}
+
+declare namespace $ {
+    class $hyoo_crowd_list extends $hyoo_crowd_node {
+        list(next?: readonly unknown[]): readonly unknown[];
+        insert(next: readonly unknown[], from?: number, to?: number): void;
+        move(from: number, to: number): $hyoo_crowd_chunk;
+        cut(seat: number): $hyoo_crowd_chunk;
+    }
+}
+
+declare namespace $ {
     class $hyoo_crowd_struct extends $hyoo_crowd_node {
         sub<Node extends typeof $hyoo_crowd_node>(key: string, Node: Node): InstanceType<Node>;
     }
@@ -1070,28 +1129,6 @@ declare namespace $ {
         str(next?: string): string;
         numb(next?: number): number;
         bool(next?: boolean): boolean;
-    }
-}
-
-declare namespace $ {
-    function $mol_reconcile<Prev, Next>({ prev, from, to, next, equal, drop, insert, update, }: {
-        prev: readonly Prev[];
-        from: number;
-        to: number;
-        next: ArrayLike<Next>;
-        equal: (next: Next, prev: Prev) => boolean;
-        drop: (prev: Prev, lead: Prev | null) => Prev | null;
-        insert: (next: Next, lead: Prev | null) => Prev;
-        update: (next: Next, prev: Prev, lead: Prev | null) => Prev;
-    }): void;
-}
-
-declare namespace $ {
-    class $hyoo_crowd_list extends $hyoo_crowd_node {
-        list(next?: readonly unknown[]): readonly unknown[];
-        insert(next: readonly unknown[], from?: number, to?: number): void;
-        move(from: number, to: number): $hyoo_crowd_chunk;
-        cut(seat: number): $hyoo_crowd_chunk;
     }
 }
 
@@ -1220,6 +1257,36 @@ declare namespace $ {
 
 declare namespace $ {
     let $mol_action: typeof $mol_wire_method;
+}
+
+declare namespace $ {
+    class $mol_db_database<Schema extends $mol_db_schema> {
+        readonly native: IDBDatabase;
+        constructor(native: IDBDatabase);
+        get name(): string;
+        get version(): number;
+        get stores(): (keyof Schema)[];
+        read<Names extends Exclude<keyof Schema, symbol | number>>(...names: Names[]): { [Name in keyof Pick<Schema, Names>]: $mol_db_store<Pick<Schema, Names>[Name]>; };
+        change<Names extends Exclude<keyof Schema, symbol | number>>(...names: Names[]): $mol_db_transaction<Pick<Schema, Names>>;
+        kill(): Promise<void>;
+        destructor(): void;
+    }
+}
+
+interface IDBTransaction {
+    commit(): void;
+}
+declare namespace $ {
+    class $mol_db_transaction<Schema extends $mol_db_schema> {
+        readonly native: IDBTransaction;
+        constructor(native: IDBTransaction);
+        get stores(): { [Name in keyof Schema]: $mol_db_store<Schema[Name]>; };
+        store_make(name: string): IDBObjectStore;
+        store_drop(name: string): this;
+        abort(): void;
+        commit(): Promise<void>;
+        get db(): $mol_db_database<$mol_db_schema>;
+    }
 }
 
 declare namespace $ {
@@ -1755,19 +1822,6 @@ declare namespace $ {
 declare namespace $ {
     class $mol_icon_calendar extends $mol_icon {
         path(): string;
-    }
-}
-
-declare namespace $ {
-    class $mol_plugin extends $mol_view {
-        dom_node(next?: Element): Element;
-        attr_static(): {
-            [key: string]: string | number | boolean;
-        };
-        event(): {
-            [key: string]: (event: Event) => void;
-        };
-        render(): void;
     }
 }
 
@@ -2455,176 +2509,6 @@ declare namespace $.$$ {
 }
 
 declare namespace $ {
-    class $mol_textarea extends $mol_view {
-        attr(): {
-            mol_textarea_clickable: boolean;
-            mol_textarea_sidebar_showed: boolean;
-        };
-        event(): {
-            keydown: (event?: any) => any;
-            pointermove: (event?: any) => any;
-        };
-        sub(): readonly any[];
-        clickable(val?: any): boolean;
-        sidebar_showed(): boolean;
-        press(event?: any): any;
-        hover(event?: any): any;
-        value(val?: any): string;
-        hint(): string;
-        enabled(): boolean;
-        length_max(): number;
-        selection(val?: any): readonly number[];
-        Edit(): $mol_textarea_edit;
-        row_numb(index: any): number;
-        highlight(): string;
-        View(): $$.$mol_text_code;
-    }
-    class $mol_textarea_edit extends $mol_string {
-        dom_name(): string;
-        field(): {
-            scrollTop: number;
-            disabled: boolean;
-            value: string;
-            placeholder: string;
-            spellcheck: boolean;
-            autocomplete: string;
-            selectionEnd: number;
-            selectionStart: number;
-        };
-    }
-}
-
-declare namespace $ {
-}
-
-declare namespace $.$$ {
-    class $mol_textarea extends $.$mol_textarea {
-        indent_inc(): void;
-        indent_dec(): void;
-        hover(event: PointerEvent): void;
-        press(event: KeyboardEvent): void;
-        row_numb(index: number): number;
-    }
-}
-
-declare namespace $ {
-    class $my_wiki extends $mol_page {
-        state(): $mol_state_shared;
-        note(id: any): $$.$my_wiki_note;
-        title(): string;
-        tools(): readonly any[];
-        body(): readonly any[];
-        changed_moment(): $mol_time_moment;
-        Changed_moment(): $$.$mol_date;
-        details(val?: any): string;
-        details_selection(val?: any): readonly number[];
-        Details(): $$.$mol_textarea;
-    }
-}
-
-declare namespace $ {
-    class $mol_state_arg extends $mol_object {
-        prefix: string;
-        static href(next?: string): string;
-        static href_normal(): string;
-        static href_absolute(): string;
-        static dict(next?: {
-            [key: string]: string | null;
-        }): {
-            [key: string]: string;
-        };
-        static dict_cut(except: string[]): {
-            [key: string]: string;
-        };
-        static value(key: string, next?: string | null): string | null;
-        static link(next: {
-            [key: string]: string;
-        }): string;
-        static prolog: string;
-        static separator: string;
-        static make_link(next: {
-            [key: string]: string | null;
-        }): string;
-        static encode(str: string): string;
-        constructor(prefix?: string);
-        value(key: string, next?: string): string | null;
-        sub(postfix: string): $mol_state_arg;
-        link(next: {
-            [key: string]: string;
-        }): string;
-    }
-}
-
-declare namespace $ {
-}
-
-declare namespace $.$$ {
-    class $my_wiki extends $.$my_wiki {
-        note(id: string): $my_wiki_note;
-        note_id(): string;
-        note_current(): $my_wiki_note;
-        title(): string;
-        details(next?: string): string;
-        details_selection(next?: number[]): number[];
-        changed_moment(next?: $mol_time_moment): $mol_time_moment;
-    }
-}
-
-declare namespace $ {
-    class $mol_db_database<Schema extends $mol_db_schema> {
-        readonly native: IDBDatabase;
-        constructor(native: IDBDatabase);
-        get name(): string;
-        get version(): number;
-        get stores(): (keyof Schema)[];
-        read<Names extends Exclude<keyof Schema, symbol | number>>(...names: Names[]): { [Name in keyof Pick<Schema, Names>]: $mol_db_store<Pick<Schema, Names>[Name]>; };
-        change<Names extends Exclude<keyof Schema, symbol | number>>(...names: Names[]): $mol_db_transaction<Pick<Schema, Names>>;
-        kill(): Promise<void>;
-        destructor(): void;
-    }
-}
-
-interface IDBTransaction {
-    commit(): void;
-}
-declare namespace $ {
-    class $mol_db_transaction<Schema extends $mol_db_schema> {
-        readonly native: IDBTransaction;
-        constructor(native: IDBTransaction);
-        get stores(): { [Name in keyof Schema]: $mol_db_store<Schema[Name]>; };
-        store_make(name: string): IDBObjectStore;
-        store_drop(name: string): this;
-        abort(): void;
-        commit(): Promise<void>;
-        get db(): $mol_db_database<$mol_db_schema>;
-    }
-}
-
-declare namespace $ {
-    class $mol_db_index<Schema extends $mol_db_index_schema> {
-        readonly native: IDBIndex;
-        constructor(native: IDBIndex);
-        get name(): string;
-        get paths(): string[];
-        get unique(): boolean;
-        get multiple(): boolean;
-        get store(): $mol_db_store<$mol_db_store_schema>;
-        get transaction(): $mol_db_transaction<$mol_db_schema>;
-        get db(): $mol_db_database<$mol_db_schema>;
-        count(keys?: Schema['Key'] | IDBKeyRange): Promise<number>;
-        get(key: Schema['Key']): Promise<Schema["Doc"] | undefined>;
-        select(key?: Schema['Key'] | IDBKeyRange | null, count?: number): Promise<Schema["Doc"][]>;
-    }
-}
-
-declare namespace $ {
-    type $mol_db_index_schema = {
-        Key: IDBValidKey[];
-        Doc: unknown;
-    };
-}
-
-declare namespace $ {
     class $mol_float extends $mol_view {
         style(): {
             minHeight: string;
@@ -2801,6 +2685,39 @@ declare namespace $ {
 }
 
 declare namespace $ {
+    class $mol_state_arg extends $mol_object {
+        prefix: string;
+        static href(next?: string): string;
+        static href_normal(): string;
+        static href_absolute(): string;
+        static dict(next?: {
+            [key: string]: string | null;
+        }): {
+            [key: string]: string;
+        };
+        static dict_cut(except: string[]): {
+            [key: string]: string;
+        };
+        static value(key: string, next?: string | null): string | null;
+        static link(next: {
+            [key: string]: string;
+        }): string;
+        static prolog: string;
+        static separator: string;
+        static make_link(next: {
+            [key: string]: string | null;
+        }): string;
+        static encode(str: string): string;
+        constructor(prefix?: string);
+        value(key: string, next?: string): string | null;
+        sub(postfix: string): $mol_state_arg;
+        link(next: {
+            [key: string]: string;
+        }): string;
+    }
+}
+
+declare namespace $ {
 }
 
 declare namespace $.$$ {
@@ -2973,6 +2890,89 @@ declare namespace $.$$ {
         text2spans(prefix: string, text: string): $mol_view[];
         code2spans(prefix: string, text: string): $mol_view[];
         block_content(indexBlock: number): ($mol_view | string)[];
+    }
+}
+
+declare namespace $ {
+    class $mol_textarea extends $mol_view {
+        attr(): {
+            mol_textarea_clickable: boolean;
+            mol_textarea_sidebar_showed: boolean;
+        };
+        event(): {
+            keydown: (event?: any) => any;
+            pointermove: (event?: any) => any;
+        };
+        sub(): readonly any[];
+        clickable(val?: any): boolean;
+        sidebar_showed(): boolean;
+        press(event?: any): any;
+        hover(event?: any): any;
+        value(val?: any): string;
+        hint(): string;
+        enabled(): boolean;
+        length_max(): number;
+        selection(val?: any): readonly number[];
+        Edit(): $mol_textarea_edit;
+        row_numb(index: any): number;
+        highlight(): string;
+        View(): $$.$mol_text_code;
+    }
+    class $mol_textarea_edit extends $mol_string {
+        dom_name(): string;
+        field(): {
+            scrollTop: number;
+            disabled: boolean;
+            value: string;
+            placeholder: string;
+            spellcheck: boolean;
+            autocomplete: string;
+            selectionEnd: number;
+            selectionStart: number;
+        };
+    }
+}
+
+declare namespace $ {
+}
+
+declare namespace $.$$ {
+    class $mol_textarea extends $.$mol_textarea {
+        indent_inc(): void;
+        indent_dec(): void;
+        hover(event: PointerEvent): void;
+        press(event: KeyboardEvent): void;
+        row_numb(index: number): number;
+    }
+}
+
+declare namespace $ {
+    class $my_wiki extends $mol_page {
+        state(): $mol_state_shared;
+        note(id: any): $$.$my_wiki_note;
+        title(): string;
+        tools(): readonly any[];
+        body(): readonly any[];
+        changed_moment(): $mol_time_moment;
+        Changed_moment(): $$.$mol_date;
+        details(val?: any): string;
+        details_selection(val?: any): readonly number[];
+        Details(): $$.$mol_textarea;
+    }
+}
+
+declare namespace $ {
+}
+
+declare namespace $.$$ {
+    class $my_wiki extends $.$my_wiki {
+        note(id: string): $my_wiki_note;
+        note_id(): string;
+        note_current(): $my_wiki_note;
+        title(): string;
+        details(next?: string): string;
+        details_selection(next?: number[]): number[];
+        changed_moment(next?: $mol_time_moment): $mol_time_moment;
     }
 }
 

@@ -265,9 +265,9 @@
     "$my_wiki_wiki.view.tree"
   ],
   "dependencies": {
+    "colorette": "*",
     "jsdom": "*",
     "fake-indexeddb": "*",
-    "colorette": "*",
     "chokidar": "*"
   }
 }
