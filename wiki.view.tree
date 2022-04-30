@@ -2,7 +2,10 @@ $my_wiki $mol_page
 	state $mol_state_shared
 	note!id $my_wiki_note
 	title \My Wiki
+	plugins /
+		<= Theme $mol_theme_auto
 	tools /
+		<= Lights $mol_lights_toggle
 		<= Changed_moment $mol_date
 			value_moment <= changed_moment $mol_time_moment
 	body /
