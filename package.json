@@ -97,8 +97,6 @@
     "$hyoo_crowd_chunk",
     "$hyoo_crowd",
     "$hyoo",
-    "$mol_report_bugsnag",
-    "$mol_report",
     "$mol_charset_encode",
     "$mol_charset",
     "$mol_charset_decode",

@@ -906,13 +906,6 @@ declare namespace $ {
 }
 
 declare namespace $ {
-    let $mol_report_bugsnag: string;
-}
-
-declare namespace $ {
-}
-
-declare namespace $ {
     function $mol_charset_encode(value: string): Uint8Array;
 }
 
