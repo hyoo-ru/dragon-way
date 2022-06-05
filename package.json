@@ -201,7 +201,10 @@
     "$mol_embed",
     "$mol_wait_timeout",
     "$mol_wait",
-    "$mol_promise"
+    "$mol_promise",
+    "$mol_button_copy",
+    "$mol_icon_content_copy",
+    "$mol_icon_content"
   ],
   "dependencies": {
     "jsdom": "*",
