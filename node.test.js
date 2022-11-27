@@ -6462,6 +6462,9 @@ var $;
             }
             return chunks.join(' ');
         }
+        static go(next) {
+            this.href(this.make_link(next));
+        }
         constructor(prefix = '') {
             super();
             this.prefix = prefix;
@@ -6493,6 +6496,9 @@ var $;
     __decorate([
         $mol_mem_key
     ], $mol_state_arg, "value", null);
+    __decorate([
+        $mol_action
+    ], $mol_state_arg, "go", null);
     $.$mol_state_arg = $mol_state_arg;
 })($ || ($ = {}));
 //mol/state/arg/arg.node.ts
