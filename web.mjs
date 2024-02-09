@@ -16180,4 +16180,5 @@ var $;
 })($ || ($ = {}));
 //my/wiki/wiki.view.css.ts
 
+export default $
 //# sourceMappingURL=web.js.map
