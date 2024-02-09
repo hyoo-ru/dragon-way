@@ -38,7 +38,7 @@ $my_wiki $mol_book2
 				<= Title $mol_string
 					hint \Title
 					value? <=> note_title? \
-					enabled <= editable
+					enabled <= editing
 					selection? <=> title_selection? /
 				<= Edit_close $mol_button_minor
 					hint \Close editor
@@ -48,5 +48,5 @@ $my_wiki $mol_book2
 				<= Body_edit $mol_textarea
 					hint \Node Content
 					value? <=> note_body? \
-					enabled <= editable
-					selection? <=> note_body_selection?
+					enabled <= editing
+					selection? <=> note_body_selection? /number

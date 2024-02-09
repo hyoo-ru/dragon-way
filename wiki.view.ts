@@ -15,25 +15,26 @@ namespace $.$$ {
 		}
 		
 		note_title( next?: string ) {
-			return this.note_current().title( next ) ?? ''
+			return this.note_current()?.title( next ) ?? ''
 		}
 		
 		note_body( next?: string ) {
-			return this.note_current().body( next ) ?? ''
+			return this.note_current()?.body( next ) ?? ''
 		}
 		
 		note_body_selection( next?: readonly[ begin: number, end: number ] ) {
-			return this.note_current().body_selection( next )
+			return this.note_current()?.body_selection( next ) ?? [ 0, 0 ]
 		}
 		
 		note_changed_moment() {
-			return this.note_current().last_change()!
+			return this.note_current()?.last_change() ?? null!
 		}
 		
 		@ $mol_action
 		add() {
 			
 			const land = this.realm().home().Land_new( 0 )
+			land.give( null, $hyoo_crus_rang.mod ) 
 			
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
 			this.editing( true )
