@@ -1,12 +1,52 @@
-$my_wiki $mol_page
-	state $mol_state_shared
-	note!id $my_wiki_note
-	title \My Wiki
-	tools /
-		<= Changed_moment $mol_date
-			value_moment <= changed_moment $mol_time_moment
-	body /
-		<= Details $mol_textarea
-			hint \Details
-			value?val <=> details?val \
-			selection?val <=> details_selection?val /number
+$my_wiki $mol_book2
+	realm $hyoo_crus_realm
+	note* $my_wiki_note
+	note_current $my_wiki_note
+	Placeholder null
+	plugins /
+		<= Theme $mol_theme_auto
+	pages /
+		<= View_page $mol_page
+			title <= note_title
+			tools /
+				<= Lights $mol_lights_toggle
+				<= Source $mol_link_source
+					uri \https://github.com/hyoo-ru/dragon-way/
+				<= Add $mol_button_minor
+					hint \Make new page
+					click? <=> add? null
+					sub /
+						<= Add_icon $mol_icon_plus
+				<= Edit_toggle $mol_check_icon
+					hint \Edit page
+					checked? <=> editing? false
+					Icon <= Edit_icon $mol_icon_pencil
+				<= Profile $mol_link
+					hint \Profile
+					arg <= profile_arg *
+					sub /
+						<= Profile_icon $mol_icon_account
+			body /
+				<= Content $mol_list rows /
+					<= Body $mol_text
+						text <= note_body
+					<= Note_changed_moment $mol_date
+						value_moment <= note_changed_moment $mol_time_moment
+						enabled false
+		<= Edit_page $mol_page
+			head /
+				<= Title $mol_string
+					hint \Title
+					value? <=> note_title? \
+					enabled <= editable
+					selection? <=> title_selection? /
+				<= Edit_close $mol_button_minor
+					hint \Close editor
+					click? <=> edit_close? null
+					sub / <= Edit_close_icon $mol_icon_cross
+			body /
+				<= Body_edit $mol_textarea
+					hint \Node Content
+					value? <=> note_body? \
+					enabled <= editable
+					selection? <=> note_body_selection?
