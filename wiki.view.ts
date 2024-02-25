@@ -65,6 +65,11 @@ namespace $.$$ {
 			]
 		}
 		
+		tags() {
+			const tags = this.note_current()?.tags() ?? []
+			return tags.map( tag => tag.title() )
+		}
+		
 	}
 	
 }
