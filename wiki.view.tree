@@ -33,8 +33,14 @@ $my_wiki $mol_book2
 					<= Note_changed_moment $mol_date
 						value_moment <= note_changed_moment $mol_time_moment
 						enabled false
-					<= Tags $mol_view
-						sub <= tags /
+					<= Fullname_set $mol_button_major
+						click? <=> fullname_set? null
+					<= Fullname_show $mol_check_box
+						title \Fullname_show
+						checked? <=> fullname_show? false
+					^ fullname_visible / 
+						<= Fullname $mol_view
+							sub / <= fullname \
 		<= Edit_page $mol_page
 			head /
 				<= Title $mol_string

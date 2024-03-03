@@ -37,7 +37,7 @@ namespace $.$$ {
 			land.give( null, $hyoo_crus_rang.mod ) 
 			
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
-			this.editing( true )
+			// this.editing( true )
 			
 		}
 		
@@ -64,10 +64,42 @@ namespace $.$$ {
 				... this.editing() ? [ this.Edit_page() ] : [],
 			]
 		}
+
+		@ $mol_mem
+		fullname_visible() {
+			return this.fullname_show()
+				? super.fullname_visible()
+				: []
+		}
+
+		@ $mol_mem
+		author() {
+			return this.note_current()?.author()
+		}
 		
-		tags() {
-			const tags = this.note_current()?.tags() ?? []
-			return tags.map( tag => tag.title() )
+		@ $mol_mem
+		profile() {
+			return this.author()?.profile()
+		}
+
+		@ $mol_mem
+		fullname() {
+			return this.profile()?.fullname() ?? ''
+		}
+
+		@ $mol_mem
+		author_ensure() {
+			return this.note_current()?.Author.remote_ensure()
+		}
+		
+		@ $mol_mem
+		profile_ensure() {
+			return this.author_ensure()?.Profile.remote_ensure()
+		}
+
+		@ $mol_action
+		fullname_set() {
+			this.profile_ensure().fullname( 'AUTHOR_PROFILE_FULLNAME' )
 		}
 		
 	}
