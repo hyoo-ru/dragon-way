@@ -71,26 +71,21 @@ namespace $.$$ {
 		}
 
 		@ $mol_mem
-		rang() {
-			return String( this.author_ensure()?.land().lord_rang( this.realm().home().ref() ) )
-		}
-
-		@ $mol_mem
 		author_ensure() {
-			const author = this.note_current()?.Author.remote_ensure()
+			const author = this.note_current()?.Author!.remote_ensure()
 			return author
 		}
 
 		@ $mol_action
 		give() {
 			const target = $hyoo_crus_ref_root( $hyoo_crus_ref( this.target_lord() ) )
-			this.author_ensure().land().give( target, $hyoo_crus_rang.law )
+			this.author_ensure()!.land().give( target, $hyoo_crus_rang.law )
 		}	
 
 		@ $mol_action
-		pull() {
-			//any pull, get profile for example
-			this.author_ensure().profile()
+		push() {
+			const profile = this.author_ensure()!.Profile!.remote_ensure()
+			console.log( 'PROFILE ENSURED', profile )
 		}
 		
 	}

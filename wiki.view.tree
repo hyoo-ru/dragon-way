@@ -35,16 +35,12 @@ $my_wiki $mol_book2
 						enabled false
 					<= Lord $mol_button_copy
 						title <= lord \
-					<= Rang $mol_view
-						sub /
-							\Rang:
-							<= rang \
 					<= Target $mol_string
 						value? <=> target_lord? \
 					<= Give $mol_button_major
 						click? <=> give? null
-					<= Pull $mol_button_minor
-						click? <=> pull? null
+					<= Push $mol_button_minor
+						click? <=> push? null
 		<= Edit_page $mol_page
 			head /
 				<= Title $mol_string
