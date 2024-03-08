@@ -1,4 +1,4 @@
-namespace $.$$ {
+namespace $ {
 	
 	export class $my_wiki_note extends $hyoo_crus_entity.with({
 		Body: $hyoo_crus_text,
@@ -6,7 +6,7 @@ namespace $.$$ {
 		
 		@ $mol_mem
 		body_selection( next?: readonly[ begin: number, end: number ] ) {
-			return this.Body.selection( this.land().auth().lord(), next )
+			return this.Body!.selection( this.land().auth().lord(), next )
 		}
 
 	}
