@@ -34,7 +34,7 @@ namespace $.$$ {
 		add() {
 			
 			const land = this.realm().home().Land_new( 0 )
-			land.give( null, $hyoo_crus_rang.mod ) 
+			// land.give( null, $hyoo_crus_rang.mod ) 
 			
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
 			// this.editing( true )
@@ -66,40 +66,31 @@ namespace $.$$ {
 		}
 
 		@ $mol_mem
-		fullname_visible() {
-			return this.fullname_show()
-				? super.fullname_visible()
-				: []
+		lord() {
+			return String( this.realm().home().ref().description )
 		}
 
 		@ $mol_mem
-		author() {
-			return this.note_current()?.author()
-		}
-		
-		@ $mol_mem
-		profile() {
-			return this.author()?.profile()
-		}
-
-		@ $mol_mem
-		fullname() {
-			return this.profile()?.fullname() ?? ''
+		rang() {
+			return String( this.author_ensure()?.land().lord_rang( this.realm().home().ref() ) )
 		}
 
 		@ $mol_mem
 		author_ensure() {
-			return this.note_current()?.Author.remote_ensure()
-		}
-		
-		@ $mol_mem
-		profile_ensure() {
-			return this.author_ensure()?.Profile.remote_ensure()
+			const author = this.note_current()?.Author.remote_ensure()
+			return author
 		}
 
 		@ $mol_action
-		fullname_set() {
-			this.profile_ensure().fullname( 'AUTHOR_PROFILE_FULLNAME' )
+		give() {
+			const target = $hyoo_crus_ref_root( $hyoo_crus_ref( this.target_lord() ) )
+			this.author_ensure().land().give( target, $hyoo_crus_rang.law )
+		}	
+
+		@ $mol_action
+		pull() {
+			//any pull, get profile for example
+			this.author_ensure().profile()
 		}
 		
 	}

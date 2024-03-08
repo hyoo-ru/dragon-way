@@ -33,14 +33,18 @@ $my_wiki $mol_book2
 					<= Note_changed_moment $mol_date
 						value_moment <= note_changed_moment $mol_time_moment
 						enabled false
-					<= Fullname_set $mol_button_major
-						click? <=> fullname_set? null
-					<= Fullname_show $mol_check_box
-						title \Fullname_show
-						checked? <=> fullname_show? false
-					^ fullname_visible / 
-						<= Fullname $mol_view
-							sub / <= fullname \
+					<= Lord $mol_button_copy
+						title <= lord \
+					<= Rang $mol_view
+						sub /
+							\Rang:
+							<= rang \
+					<= Target $mol_string
+						value? <=> target_lord? \
+					<= Give $mol_button_major
+						click? <=> give? null
+					<= Pull $mol_button_minor
+						click? <=> pull? null
 		<= Edit_page $mol_page
 			head /
 				<= Title $mol_string
