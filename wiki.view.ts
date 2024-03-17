@@ -32,10 +32,17 @@ namespace $.$$ {
 		
 		@ $mol_action
 		add() {
+
+			// (1) Это не должно давать те же права, что и код (2) ?
+			// const land = this.realm().land_grab( $hyoo_crus_rank_orgy )
 			
-			const land = this.realm().home().Land_new( 0 )
-			land.give( null, $hyoo_crus_rang.mod ) 
+			// (2) Все норм
+			const land = this.realm().land_grab()
+			land.give( null, $hyoo_crus_rank.mod )
 			
+			// (3) Выдача прав самому себе ломает синхронизацию
+			land.give( this.realm().home().ref(), $hyoo_crus_rank.law )
+
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
 			this.editing( true )
 			
