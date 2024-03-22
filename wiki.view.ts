@@ -33,8 +33,7 @@ namespace $.$$ {
 		@ $mol_action
 		add() {
 			
-			const land = this.realm().home().Land_new( 0 )
-			land.give( null, $hyoo_crus_rang.mod ) 
+			const land = this.realm().land_grab( $hyoo_crus_rank_orgy )
 			
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
 			this.editing( true )
@@ -44,7 +43,7 @@ namespace $.$$ {
 		@ $mol_mem
 		profile_arg() {
 			return {
-				'': this.realm().home().Profile( '$my_wiki', $my_wiki_note, null )!.ref().description
+				'': this.realm().home().Profile( '$my_wiki', $my_wiki_note, $hyoo_crus_rank_public )!.ref().description
 			}
 		}
 		
