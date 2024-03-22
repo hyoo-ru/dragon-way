@@ -789,16 +789,13 @@ var $;
                         result = this.task.call(this.host, ...this.args);
                         break;
                 }
-                if ($mol_promise_like(result)) {
+                if ($mol_promise_like(result) && !handled.has(result)) {
                     const put = (res) => {
                         if (this.cache === result)
                             this.put(res);
                         return res;
                     };
-                    result = Object.assign(result.then(put, put), {
-                        destructor: result['destructor'] ?? (() => { })
-                    });
-                    handled.add(result);
+                    result = result.then(put, put);
                 }
             }
             catch (error) {
@@ -809,14 +806,19 @@ var $;
                     result = new Error(String(error), { cause: error });
                 }
                 if ($mol_promise_like(result) && !handled.has(result)) {
-                    result = Object.assign(result.finally(() => {
+                    result = result.finally(() => {
                         if (this.cache === result)
                             this.absorb();
-                    }), {
-                        destructor: result['destructor'] ?? (() => { })
                     });
-                    handled.add(result);
                 }
+            }
+            if ($mol_promise_like(result) && !handled.has(result)) {
+                result = Object.assign(result, {
+                    destructor: result['destructor'] ?? (() => { })
+                });
+                handled.add(result);
+                const error = new Error(`Promise in ${this}`);
+                Object.defineProperty(result, 'stack', { get: () => error.stack });
             }
             if (!$mol_promise_like(result)) {
                 this.track_cut();
@@ -1975,6 +1977,12 @@ var $node = new Proxy({ require }, {
             return target.require(name);
         }
         catch (error) {
+            if (error.code === 'ERR_REQUIRE_ESM') {
+                const module = cache.get(name);
+                if (module)
+                    return module;
+                throw import(name).then(module => cache.set(name, module));
+            }
             $.$mol_fail_log(error);
             return null;
         }
@@ -1984,6 +1992,7 @@ var $node = new Proxy({ require }, {
         return true;
     },
 });
+const cache = new Map();
 require = (req => Object.assign(function require(name) {
     return $node[name];
 }, req))(require);
@@ -2587,10 +2596,10 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    function $mol_style_prop(prefix, postfixes) {
-        const record = postfixes.reduce((record_obj, postfix) => {
-            record_obj[postfix] = $mol_style_func.vary(`--${prefix}_${postfix}`);
-            return record_obj;
+    function $mol_style_prop(prefix, keys) {
+        const record = keys.reduce((rec, key) => {
+            rec[key] = $mol_style_func.vary(`--${prefix}_${key}`);
+            return rec;
         }, {});
         return record;
     }
@@ -3365,7 +3374,10 @@ var $;
                 shrink: 1,
             },
             outline: 'none',
-            alignSelf: 'stretch',
+            align: {
+                self: 'stretch',
+                items: 'flex-start',
+            },
             boxSizing: 'border-box',
             willChange: 'scroll-position',
             scroll: {
@@ -3775,6 +3787,418 @@ var $;
 
 ;
 "use strict";
+
+;
+"use strict";
+var $;
+(function ($) {
+    const decoders = {};
+    function $mol_charset_decode(buffer, encoding = 'utf8') {
+        let decoder = decoders[encoding];
+        if (!decoder)
+            decoder = decoders[encoding] = new TextDecoder(encoding);
+        return decoder.decode(buffer);
+    }
+    $.$mol_charset_decode = $mol_charset_decode;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    const TextEncoder = globalThis.TextEncoder ?? $node.util.TextEncoder;
+    const encoder = new TextEncoder();
+    function $mol_charset_encode(value) {
+        return encoder.encode(value);
+    }
+    $.$mol_charset_encode = $mol_charset_encode;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_file_not_found extends Error {
+    }
+    $.$mol_file_not_found = $mol_file_not_found;
+    class $mol_file extends $mol_object {
+        static absolute(path) {
+            throw new Error('Not implemented yet');
+        }
+        static relative(path) {
+            throw new Error('Not implemented yet');
+        }
+        static base = '';
+        path() {
+            return '.';
+        }
+        parent() {
+            return this.resolve('..');
+        }
+        reset() {
+            try {
+                this.stat(null);
+            }
+            catch (error) {
+                if (error instanceof $mol_file_not_found)
+                    return;
+                return $mol_fail_hidden(error);
+            }
+        }
+        version() {
+            return this.stat()?.mtime.getTime().toString(36).toUpperCase() ?? '';
+        }
+        watcher() {
+            console.warn('$mol_file_web.watcher() not implemented');
+            return {
+                destructor() { }
+            };
+        }
+        exists(next) {
+            let exists = Boolean(this.stat());
+            if (next === undefined)
+                return exists;
+            if (next === exists)
+                return exists;
+            if (next) {
+                this.parent().exists(true);
+                this.ensure();
+            }
+            else {
+                this.drop();
+            }
+            this.reset();
+            return next;
+        }
+        type() {
+            return this.stat()?.type ?? '';
+        }
+        name() {
+            return this.path().replace(/^.*\//, '');
+        }
+        ext() {
+            const match = /((?:\.\w+)+)$/.exec(this.path());
+            return match ? match[1].substring(1) : '';
+        }
+        text(next, virt) {
+            if (virt) {
+                const now = new Date;
+                this.stat({
+                    type: 'file',
+                    size: 0,
+                    atime: now,
+                    mtime: now,
+                    ctime: now,
+                }, 'virt');
+                return next;
+            }
+            if (next === undefined) {
+                return $mol_charset_decode(this.buffer(undefined));
+            }
+            else {
+                const buffer = next === undefined ? undefined : $mol_charset_encode(next);
+                this.buffer(buffer);
+                return next;
+            }
+        }
+        find(include, exclude) {
+            const found = [];
+            const sub = this.sub();
+            for (const child of sub) {
+                const child_path = child.path();
+                if (exclude && child_path.match(exclude))
+                    continue;
+                if (!include || child_path.match(include))
+                    found.push(child);
+                if (child.type() === 'dir') {
+                    const sub_child = child.find(include, exclude);
+                    for (const child of sub_child)
+                        found.push(child);
+                }
+            }
+            return found;
+        }
+        size() {
+            switch (this.type()) {
+                case 'file': return this.stat()?.size ?? 0;
+                default: return 0;
+            }
+        }
+        open(...modes) {
+            return 0;
+        }
+        toJSON() {
+            return this.path();
+        }
+    }
+    __decorate([
+        $mol_mem
+    ], $mol_file.prototype, "exists", null);
+    __decorate([
+        $mol_mem
+    ], $mol_file.prototype, "text", null);
+    __decorate([
+        $mol_mem_key
+    ], $mol_file, "absolute", null);
+    $.$mol_file = $mol_file;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    function $mol_compare_array(a, b) {
+        if (a === b)
+            return true;
+        if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
+            return false;
+        if (a.length !== b.length)
+            return false;
+        for (let i = 0; i < a.length; i++)
+            if (a[i] !== b[i])
+                return false;
+        return true;
+    }
+    $.$mol_compare_array = $mol_compare_array;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    function stat_convert(stat) {
+        if (!stat)
+            return null;
+        let type;
+        if (stat.isDirectory())
+            type = 'dir';
+        if (stat.isFile())
+            type = 'file';
+        if (stat.isSymbolicLink())
+            type = 'link';
+        if (!type)
+            return $mol_fail(new Error(`Unsupported file type`));
+        return {
+            type,
+            size: Number(stat.size),
+            atime: stat.atime,
+            mtime: stat.mtime,
+            ctime: stat.ctime
+        };
+    }
+    function buffer_normalize(buf) {
+        return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    let $mol_file_mode_open;
+    (function ($mol_file_mode_open) {
+        $mol_file_mode_open[$mol_file_mode_open["create"] = $node.fs.constants.O_CREAT] = "create";
+        $mol_file_mode_open[$mol_file_mode_open["exists_truncate"] = $node.fs.constants.O_TRUNC] = "exists_truncate";
+        $mol_file_mode_open[$mol_file_mode_open["exists_fail"] = $node.fs.constants.O_EXCL] = "exists_fail";
+        $mol_file_mode_open[$mol_file_mode_open["read_only"] = $node.fs.constants.O_RDONLY] = "read_only";
+        $mol_file_mode_open[$mol_file_mode_open["write_only"] = $node.fs.constants.O_WRONLY] = "write_only";
+        $mol_file_mode_open[$mol_file_mode_open["read_write"] = $node.fs.constants.O_RDWR] = "read_write";
+        $mol_file_mode_open[$mol_file_mode_open["append"] = $node.fs.constants.O_APPEND] = "append";
+    })($mol_file_mode_open = $.$mol_file_mode_open || ($.$mol_file_mode_open = {}));
+    class $mol_file_node extends $mol_file {
+        static absolute(path) {
+            return this.make({
+                path: $mol_const(path)
+            });
+        }
+        static relative(path) {
+            return this.absolute($node.path.resolve(this.base, path).replace(/\\/g, '/'));
+        }
+        watcher() {
+            const watcher = $node.chokidar.watch(this.path(), {
+                persistent: true,
+                ignored: /(^\.|___$)/,
+                depth: 0,
+                ignoreInitial: true,
+                awaitWriteFinish: {
+                    stabilityThreshold: 100,
+                },
+            });
+            watcher
+                .on('all', (type, path) => {
+                const file = $mol_file.relative(path.replace(/\\/g, '/'));
+                file.reset();
+                if (type === 'change') {
+                    this.stat(null);
+                }
+                else {
+                    file.parent().reset();
+                }
+            })
+                .on('error', $mol_fail_log);
+            return {
+                destructor() {
+                    watcher.close();
+                }
+            };
+        }
+        stat(next, virt) {
+            let stat = next;
+            const path = this.path();
+            this.parent().watcher();
+            if (virt)
+                return next;
+            try {
+                stat = next ?? stat_convert($node.fs.statSync(path, { throwIfNoEntry: false }));
+            }
+            catch (error) {
+                if (error.code === 'ENOENT')
+                    error = new $mol_file_not_found(`File not found`);
+                error.message += '\n' + path;
+                return this.$.$mol_fail_hidden(error);
+            }
+            return stat;
+        }
+        ensure() {
+            const path = this.path();
+            try {
+                $node.fs.mkdirSync(path);
+            }
+            catch (e) {
+                e.message += '\n' + path;
+                this.$.$mol_fail_hidden(e);
+            }
+        }
+        drop() {
+            $node.fs.unlinkSync(this.path());
+        }
+        buffer(next) {
+            const path = this.path();
+            if (next === undefined) {
+                if (!this.stat())
+                    return new Uint8Array;
+                try {
+                    const prev = $mol_mem_cached(() => this.buffer());
+                    next = buffer_normalize($node.fs.readFileSync(path));
+                    if (prev !== undefined && !$mol_compare_array(prev, next)) {
+                        this.$.$mol_log3_rise({
+                            place: `$mol_file_node..buffer()`,
+                            message: 'Changed',
+                            path: this.relate(),
+                        });
+                    }
+                    return next;
+                }
+                catch (error) {
+                    error.message += '\n' + path;
+                    return this.$.$mol_fail_hidden(error);
+                }
+            }
+            this.parent().exists(true);
+            const now = new Date;
+            this.stat({
+                type: 'file',
+                size: next.length,
+                atime: now,
+                mtime: now,
+                ctime: now,
+            }, 'virt');
+            try {
+                $node.fs.writeFileSync(path, next);
+            }
+            catch (error) {
+                error.message += '\n' + path;
+                return this.$.$mol_fail_hidden(error);
+            }
+            return next;
+        }
+        sub() {
+            if (!this.exists())
+                return [];
+            if (this.type() !== 'dir')
+                return [];
+            const path = this.path();
+            this.stat();
+            try {
+                return $node.fs.readdirSync(path)
+                    .filter(name => !/^\.+$/.test(name))
+                    .map(name => this.resolve(name));
+            }
+            catch (e) {
+                e.message += '\n' + path;
+                return this.$.$mol_fail_hidden(e);
+            }
+        }
+        resolve(path) {
+            return this.constructor.relative($node.path.join(this.path(), path));
+        }
+        relate(base = this.constructor.relative('.')) {
+            return $node.path.relative(base.path(), this.path()).replace(/\\/g, '/');
+        }
+        append(next) {
+            const path = this.path();
+            try {
+                $node.fs.appendFileSync(path, next);
+            }
+            catch (e) {
+                e.message += '\n' + path;
+                return this.$.$mol_fail_hidden(e);
+            }
+        }
+        open(...modes) {
+            return $node.fs.openSync(this.path(), modes.reduce((res, mode) => res | $mol_file_mode_open[mode], 0));
+        }
+    }
+    __decorate([
+        $mol_mem
+    ], $mol_file_node.prototype, "watcher", null);
+    __decorate([
+        $mol_mem
+    ], $mol_file_node.prototype, "stat", null);
+    __decorate([
+        $mol_mem
+    ], $mol_file_node.prototype, "ensure", null);
+    __decorate([
+        $mol_action
+    ], $mol_file_node.prototype, "drop", null);
+    __decorate([
+        $mol_mem
+    ], $mol_file_node.prototype, "buffer", null);
+    __decorate([
+        $mol_mem
+    ], $mol_file_node.prototype, "sub", null);
+    __decorate([
+        $mol_mem_key
+    ], $mol_file_node, "absolute", null);
+    $.$mol_file_node = $mol_file_node;
+    $.$mol_file = $mol_file_node;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_state_local_node extends $mol_state_local {
+        static dir() {
+            const base = process.env.XDG_DATA_HOME || ($node.os.homedir() + '/.local/share');
+            return $mol_file.absolute(base).resolve('./hyoo_state_local');
+        }
+        static value(key, next) {
+            const file = this.dir().resolve(encodeURIComponent(key) + '.json');
+            if (next === null) {
+                file.exists(false);
+                return null;
+            }
+            const arg = next === undefined ? undefined : JSON.stringify(next);
+            return JSON.parse(file.text(arg) || 'null');
+        }
+    }
+    __decorate([
+        $mol_mem
+    ], $mol_state_local_node, "dir", null);
+    __decorate([
+        $mol_mem_key
+    ], $mol_state_local_node, "value", null);
+    $.$mol_state_local_node = $mol_state_local_node;
+    $.$mol_state_local = $mol_state_local_node;
+})($ || ($ = {}));
+
+;
+"use strict";
 var $;
 (function ($) {
     function parse(theme) {
@@ -4107,7 +4531,7 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    $mol_style_attach("mol/button/button.view.css", "[mol_button] {\n\tborder: none;\n\tfont: inherit;\n\tdisplay: inline-flex;\n\tflex-shrink: 0;\n\ttext-decoration: inherit;\n\tcursor: inherit;\n\tposition: relative;\n\tbox-sizing: border-box;\n\tword-break: normal;\n\tcursor: default;\n\tuser-select: none;\n\tborder-radius: var(--mol_gap_round);\n}\n\n[mol_button]:where(:not(:disabled)):hover {\n\tz-index: var(--mol_layer_hover);\n}\n\n[mol_button]:focus-visible {\n\toutline: none;\n\tz-index: var(--mol_layer_focus);\n}\n");
+    $mol_style_attach("mol/button/button.view.css", "[mol_button] {\n\tborder: none;\n\tfont: inherit;\n\tdisplay: inline-flex;\n\tflex-shrink: 0;\n\ttext-decoration: inherit;\n\tcursor: inherit;\n\tposition: relative;\n\tbox-sizing: border-box;\n\tword-break: normal;\n\tcursor: default;\n\tuser-select: none;\n\tborder-radius: var(--mol_gap_round);\n\tbackground: transparent;\n\tcolor: inherit;\n}\n\n[mol_button]:where(:not(:disabled)):hover {\n\tz-index: var(--mol_layer_hover);\n}\n\n[mol_button]:focus-visible {\n\toutline: none;\n\tz-index: var(--mol_layer_focus);\n}\n");
 })($ || ($ = {}));
 
 ;
@@ -4430,386 +4854,6 @@ var $;
 
 ;
 "use strict";
-
-;
-"use strict";
-
-;
-"use strict";
-var $;
-(function ($) {
-    const decoders = {};
-    function $mol_charset_decode(buffer, encoding = 'utf8') {
-        let decoder = decoders[encoding];
-        if (!decoder)
-            decoder = decoders[encoding] = new TextDecoder(encoding);
-        return decoder.decode(buffer);
-    }
-    $.$mol_charset_decode = $mol_charset_decode;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    const TextEncoder = globalThis.TextEncoder ?? $node.util.TextEncoder;
-    const encoder = new TextEncoder();
-    function $mol_charset_encode(value) {
-        return encoder.encode(value);
-    }
-    $.$mol_charset_encode = $mol_charset_encode;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    class $mol_file_not_found extends Error {
-    }
-    $.$mol_file_not_found = $mol_file_not_found;
-    class $mol_file extends $mol_object {
-        static absolute(path) {
-            throw new Error('Not implemented yet');
-        }
-        static relative(path) {
-            throw new Error('Not implemented yet');
-        }
-        static base = '';
-        path() {
-            return '.';
-        }
-        parent() {
-            return this.resolve('..');
-        }
-        reset() {
-            try {
-                this.stat(null);
-            }
-            catch (error) {
-                if (error instanceof $mol_file_not_found)
-                    return;
-                return $mol_fail_hidden(error);
-            }
-        }
-        version() {
-            return this.stat()?.mtime.getTime().toString(36).toUpperCase() ?? '';
-        }
-        watcher() {
-            console.warn('$mol_file_web.watcher() not implemented');
-            return {
-                destructor() { }
-            };
-        }
-        exists(next) {
-            let exists = Boolean(this.stat());
-            if (next === undefined)
-                return exists;
-            if (next === exists)
-                return exists;
-            if (next) {
-                this.parent().exists(true);
-                this.ensure();
-            }
-            else {
-                this.drop();
-            }
-            this.reset();
-            return next;
-        }
-        type() {
-            return this.stat()?.type ?? '';
-        }
-        name() {
-            return this.path().replace(/^.*\//, '');
-        }
-        ext() {
-            const match = /((?:\.\w+)+)$/.exec(this.path());
-            return match ? match[1].substring(1) : '';
-        }
-        text(next, virt) {
-            if (virt) {
-                const now = new Date;
-                this.stat({
-                    type: 'file',
-                    size: 0,
-                    atime: now,
-                    mtime: now,
-                    ctime: now,
-                }, 'virt');
-                return next;
-            }
-            if (next === undefined) {
-                return $mol_charset_decode(this.buffer(undefined));
-            }
-            else {
-                const buffer = next === undefined ? undefined : $mol_charset_encode(next);
-                this.buffer(buffer);
-                return next;
-            }
-        }
-        find(include, exclude) {
-            const found = [];
-            const sub = this.sub();
-            for (const child of sub) {
-                const child_path = child.path();
-                if (exclude && child_path.match(exclude))
-                    continue;
-                if (!include || child_path.match(include))
-                    found.push(child);
-                if (child.type() === 'dir') {
-                    const sub_child = child.find(include, exclude);
-                    for (const child of sub_child)
-                        found.push(child);
-                }
-            }
-            return found;
-        }
-        size() {
-            switch (this.type()) {
-                case 'file': return this.stat()?.size ?? 0;
-                default: return 0;
-            }
-        }
-        open(...modes) {
-            return 0;
-        }
-    }
-    __decorate([
-        $mol_mem
-    ], $mol_file.prototype, "exists", null);
-    __decorate([
-        $mol_mem
-    ], $mol_file.prototype, "text", null);
-    __decorate([
-        $mol_mem_key
-    ], $mol_file, "absolute", null);
-    $.$mol_file = $mol_file;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    function $mol_compare_array(a, b) {
-        if (a === b)
-            return true;
-        if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
-            return false;
-        if (a.length !== b.length)
-            return false;
-        for (let i = 0; i < a.length; i++)
-            if (a[i] !== b[i])
-                return false;
-        return true;
-    }
-    $.$mol_compare_array = $mol_compare_array;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    function stat_convert(stat) {
-        if (!stat)
-            return null;
-        let type;
-        if (stat.isDirectory())
-            type = 'dir';
-        if (stat.isFile())
-            type = 'file';
-        if (stat.isSymbolicLink())
-            type = 'link';
-        if (!type)
-            return $mol_fail(new Error(`Unsupported file type`));
-        return {
-            type,
-            size: Number(stat.size),
-            atime: stat.atime,
-            mtime: stat.mtime,
-            ctime: stat.ctime
-        };
-    }
-    function buffer_normalize(buf) {
-        return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-    }
-    let $mol_file_mode_open;
-    (function ($mol_file_mode_open) {
-        $mol_file_mode_open[$mol_file_mode_open["create"] = $node.fs.constants.O_CREAT] = "create";
-        $mol_file_mode_open[$mol_file_mode_open["exists_truncate"] = $node.fs.constants.O_TRUNC] = "exists_truncate";
-        $mol_file_mode_open[$mol_file_mode_open["exists_fail"] = $node.fs.constants.O_EXCL] = "exists_fail";
-        $mol_file_mode_open[$mol_file_mode_open["read_only"] = $node.fs.constants.O_RDONLY] = "read_only";
-        $mol_file_mode_open[$mol_file_mode_open["write_only"] = $node.fs.constants.O_WRONLY] = "write_only";
-        $mol_file_mode_open[$mol_file_mode_open["read_write"] = $node.fs.constants.O_RDWR] = "read_write";
-        $mol_file_mode_open[$mol_file_mode_open["append"] = $node.fs.constants.O_APPEND] = "append";
-    })($mol_file_mode_open = $.$mol_file_mode_open || ($.$mol_file_mode_open = {}));
-    class $mol_file_node extends $mol_file {
-        static absolute(path) {
-            return this.make({
-                path: $mol_const(path)
-            });
-        }
-        static relative(path) {
-            return this.absolute($node.path.resolve(this.base, path).replace(/\\/g, '/'));
-        }
-        watcher() {
-            const watcher = $node.chokidar.watch(this.path(), {
-                persistent: true,
-                ignored: /(^\.|___$)/,
-                depth: 0,
-                ignoreInitial: true,
-                awaitWriteFinish: {
-                    stabilityThreshold: 100,
-                },
-            });
-            watcher
-                .on('all', (type, path) => {
-                const file = $mol_file.relative(path.replace(/\\/g, '/'));
-                file.reset();
-                if (type === 'change') {
-                    this.stat(null);
-                }
-                else {
-                    file.parent().reset();
-                }
-            })
-                .on('error', $mol_fail_log);
-            return {
-                destructor() {
-                    watcher.close();
-                }
-            };
-        }
-        stat(next, virt) {
-            let stat = next;
-            const path = this.path();
-            this.parent().watcher();
-            if (virt)
-                return next;
-            try {
-                stat = next ?? stat_convert($node.fs.statSync(path, { throwIfNoEntry: false }));
-            }
-            catch (error) {
-                if (error.code === 'ENOENT')
-                    error = new $mol_file_not_found(`File not found`);
-                error.message += '\n' + path;
-                return this.$.$mol_fail_hidden(error);
-            }
-            return stat;
-        }
-        ensure() {
-            const path = this.path();
-            try {
-                $node.fs.mkdirSync(path);
-            }
-            catch (e) {
-                e.message += '\n' + path;
-                this.$.$mol_fail_hidden(e);
-            }
-        }
-        drop() {
-            $node.fs.unlinkSync(this.path());
-        }
-        buffer(next) {
-            const path = this.path();
-            if (next === undefined) {
-                if (!this.stat())
-                    return new Uint8Array;
-                try {
-                    const prev = $mol_mem_cached(() => this.buffer());
-                    next = buffer_normalize($node.fs.readFileSync(path));
-                    if (prev !== undefined && !$mol_compare_array(prev, next)) {
-                        this.$.$mol_log3_rise({
-                            place: `$mol_file_node..buffer()`,
-                            message: 'Changed',
-                            path: this.relate(),
-                        });
-                    }
-                    return next;
-                }
-                catch (error) {
-                    error.message += '\n' + path;
-                    return this.$.$mol_fail_hidden(error);
-                }
-            }
-            this.parent().exists(true);
-            const now = new Date;
-            this.stat({
-                type: 'file',
-                size: next.length,
-                atime: now,
-                mtime: now,
-                ctime: now,
-            }, 'virt');
-            try {
-                $node.fs.writeFileSync(path, next);
-            }
-            catch (error) {
-                error.message += '\n' + path;
-                return this.$.$mol_fail_hidden(error);
-            }
-            return next;
-        }
-        sub() {
-            if (!this.exists())
-                return [];
-            if (this.type() !== 'dir')
-                return [];
-            const path = this.path();
-            this.stat();
-            try {
-                return $node.fs.readdirSync(path)
-                    .filter(name => !/^\.+$/.test(name))
-                    .map(name => this.resolve(name));
-            }
-            catch (e) {
-                e.message += '\n' + path;
-                return this.$.$mol_fail_hidden(e);
-            }
-        }
-        resolve(path) {
-            return this.constructor.relative($node.path.join(this.path(), path));
-        }
-        relate(base = this.constructor.relative('.')) {
-            return $node.path.relative(base.path(), this.path()).replace(/\\/g, '/');
-        }
-        append(next) {
-            const path = this.path();
-            try {
-                $node.fs.appendFileSync(path, next);
-            }
-            catch (e) {
-                e.message += '\n' + path;
-                return this.$.$mol_fail_hidden(e);
-            }
-        }
-        open(...modes) {
-            return $node.fs.openSync(this.path(), modes.reduce((res, mode) => res | $mol_file_mode_open[mode], 0));
-        }
-    }
-    __decorate([
-        $mol_mem
-    ], $mol_file_node.prototype, "watcher", null);
-    __decorate([
-        $mol_mem
-    ], $mol_file_node.prototype, "stat", null);
-    __decorate([
-        $mol_mem
-    ], $mol_file_node.prototype, "ensure", null);
-    __decorate([
-        $mol_action
-    ], $mol_file_node.prototype, "drop", null);
-    __decorate([
-        $mol_mem
-    ], $mol_file_node.prototype, "buffer", null);
-    __decorate([
-        $mol_mem
-    ], $mol_file_node.prototype, "sub", null);
-    __decorate([
-        $mol_mem_key
-    ], $mol_file_node, "absolute", null);
-    $.$mol_file_node = $mol_file_node;
-    $.$mol_file = $mol_file_node;
-})($ || ($ = {}));
 
 ;
 "use strict";
@@ -5236,8 +5280,7 @@ var $;
 (function ($) {
     let cache = null;
     function $mol_support_css_overflow_anchor() {
-        return cache ?? (cache = (!/Gecko\//.test(navigator.userAgent)
-            && this.$mol_dom_context.CSS?.supports('overflow-anchor:auto')) ?? false);
+        return cache ?? (cache = this.$mol_dom_context.CSS?.supports('overflow-anchor:auto') ?? false);
     }
     $.$mol_support_css_overflow_anchor = $mol_support_css_overflow_anchor;
 })($ || ($ = {}));
@@ -5299,21 +5342,21 @@ var $;
                 }
                 let top2 = top;
                 let bottom2 = bottom;
-                if (anchoring && (top <= limit_top) && (bottom2 < limit_bottom)) {
-                    min2 = Math.max(0, max - 1);
+                if (anchoring && (top < limit_top) && (bottom < limit_bottom) && (max < kids.length)) {
+                    min2 = max;
                     top2 = bottom;
                 }
-                if ((bottom >= limit_bottom) && (top2 >= limit_top)) {
-                    max2 = Math.min(min + 1, kids.length);
+                if ((bottom > limit_bottom) && (top > limit_top) && (min > 0)) {
+                    max2 = min;
                     bottom2 = top;
+                }
+                while (anchoring && ((top2 > limit_top) && (min2 > 0))) {
+                    --min2;
+                    top2 -= kids[min2].minimal_height();
                 }
                 while (bottom2 < limit_bottom && max2 < kids.length) {
                     bottom2 += kids[max2].minimal_height();
                     ++max2;
-                }
-                while (anchoring && ((top2 >= limit_top) && (min2 > 0))) {
-                    --min2;
-                    top2 -= kids[min2].minimal_height();
                 }
                 return [min2, max2];
             }
@@ -8260,6 +8303,8 @@ var $;
         constructor(config = 0) {
             super();
             if (typeof config === 'number') {
+                if (!Number.isFinite(config))
+                    throw new RangeError(`Wrong ms count`);
                 this.second = config / 1000;
                 return;
             }
@@ -8410,8 +8455,11 @@ var $;
     class $mol_time_moment extends $mol_time_base {
         constructor(config = new Date) {
             super();
-            if (typeof config === 'number')
+            if (typeof config === 'number') {
                 config = new Date(config);
+                if (Number.isNaN(config.valueOf()))
+                    throw new RangeError(`Wrong ms count`);
+            }
             if (typeof config === 'string') {
                 const parsed = /^(?:(\d\d?\d?\d?)(?:-?(\d\d?)(?:-?(\d\d?))?)?)?(?:[T ](?:(\d\d?)(?::?(\d\d?)(?::?(\d\d?(?:\.\d+)?))?)?)?(Z|[\+\-]\d\d?(?::?(?:\d\d?)?)?)?)?$/.exec(config);
                 if (!parsed)
@@ -10727,32 +10775,24 @@ var $;
     $.$hyoo_crus_ref = $mol_data_tagged({ $hyoo_crus_ref: (val) => {
             if (typeof val === 'string')
                 val = Symbol.for(val.replace(/_+$/, ''));
-            if (/^(([a-zæA-ZÆ0-9]{8})?_){0,3}([a-zæA-ZÆ0-9]{8})?$/.test(val.description))
+            if (/^(([a-zæA-ZÆ0-9]{8})?_){0,2}([a-zæA-ZÆ0-9]{8})?$/.test(val.description))
                 return val;
             $mol_fail(new Error(`Wrong ref (${val.description})`));
         } }).$hyoo_crus_ref;
-    function $hyoo_crus_ref_home(ref) {
+    function $hyoo_crus_ref_land(ref) {
         return $.$hyoo_crus_ref(ref.description.slice(0, 17));
     }
-    $.$hyoo_crus_ref_home = $hyoo_crus_ref_home;
-    function $hyoo_crus_ref_root(ref) {
-        return $.$hyoo_crus_ref(ref.description.split('_').slice(0, 3).join('_'));
-    }
-    $.$hyoo_crus_ref_root = $hyoo_crus_ref_root;
-    function $hyoo_crus_ref_lord(ref) {
-        return $hyoo_crus_ref_home(ref);
-    }
-    $.$hyoo_crus_ref_lord = $hyoo_crus_ref_lord;
-    function $hyoo_crus_ref_land(ref) {
-        return ref.description.split('_')[2] ?? '';
-    }
     $.$hyoo_crus_ref_land = $hyoo_crus_ref_land;
+    function $hyoo_crus_ref_peer(ref) {
+        return ref.description.split('_')[0] ?? '';
+    }
+    $.$hyoo_crus_ref_peer = $hyoo_crus_ref_peer;
     function $hyoo_crus_ref_head(ref) {
-        return ref.description.split('_')[3] ?? '';
+        return ref.description.split('_')[2] ?? '';
     }
     $.$hyoo_crus_ref_head = $hyoo_crus_ref_head;
     function $hyoo_crus_ref_encode(ref) {
-        return $mol_base64_ae_decode(ref.description
+        return $mol_base64_ae_decode((ref.description || '_')
             .split(/_/g)
             .map(numb => numb || 'AAAAAAAA')
             .join(''));
@@ -10765,17 +10805,17 @@ var $;
     }
     $.$hyoo_crus_ref_decode = $hyoo_crus_ref_decode;
     function $hyoo_crus_ref_relate(base, ref) {
-        if (!ref.description.padEnd(19, '_').startsWith(base.description.padEnd(19, '_')))
+        if (!ref.description.padEnd(18, '_').startsWith(base.description.slice(0, 18).padEnd(18, '_')))
             return ref;
-        return $.$hyoo_crus_ref(('___' + (ref.description.split('_')[3] ?? '')).replace(/_+$/, ''));
+        return $.$hyoo_crus_ref(('__' + (ref.description.split('_')[2] ?? '')).replace(/_+$/, ''));
     }
     $.$hyoo_crus_ref_relate = $hyoo_crus_ref_relate;
     function $hyoo_crus_ref_resolve(base, ref) {
         if (!ref.description)
-            return $hyoo_crus_ref_root(base);
-        if (!ref.description.startsWith('___'))
+            return $hyoo_crus_ref_land(base);
+        if (!ref.description.startsWith('__'))
             return ref;
-        return $.$hyoo_crus_ref(base.description.padEnd(18, '_') + ref.description.slice(2));
+        return $.$hyoo_crus_ref(base.description.slice(0, 18).padEnd(18, '_') + ref.description.slice(2));
     }
     $.$hyoo_crus_ref_resolve = $hyoo_crus_ref_resolve;
 })($ || ($ = {}));
@@ -10998,7 +11038,7 @@ var $;
             return new $mol_crypto_key_public(this.buffer, this.byteOffset, this.byteOffset + 64);
         }
         async sign(data) {
-            return await $mol_crypto_native.subtle.sign(algorithm, await this.native(), data);
+            return new Uint8Array(await $mol_crypto_native.subtle.sign(algorithm, await this.native(), data));
         }
     }
     __decorate([
@@ -11008,6 +11048,299 @@ var $;
         $mol_memo.method
     ], $mol_crypto_key_private.prototype, "public", null);
     $.$mol_crypto_key_private = $mol_crypto_key_private;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    const algorithm = {
+        name: 'AES-CBC',
+        length: 128,
+        tagLength: 32,
+    };
+    class $mol_crypto_secret extends Object {
+        native;
+        static size = 16;
+        constructor(native) {
+            super();
+            this.native = native;
+        }
+        static async generate() {
+            return new this(await $mol_crypto_native.subtle.generateKey(algorithm, true, ['encrypt', 'decrypt']));
+        }
+        static async from(serial) {
+            return new this(await $mol_crypto_native.subtle.importKey('raw', serial, algorithm, true, ['encrypt', 'decrypt']));
+        }
+        static async pass(pass, salt) {
+            return new this(await $mol_crypto_native.subtle.deriveKey({
+                name: "PBKDF2",
+                salt,
+                iterations: 10_000,
+                hash: "SHA-256",
+            }, await $mol_crypto_native.subtle.importKey("raw", $mol_charset_encode(pass), "PBKDF2", false, ["deriveKey"]), algorithm, true, ['encrypt', 'decrypt']));
+        }
+        static async derive(private_serial, public_serial) {
+            const ecdh = { name: "ECDH", namedCurve: "P-256" };
+            const jwk = { crv: 'P-256', ext: true, kty: 'EC' };
+            const private_key = await $mol_crypto_native.subtle.importKey('jwk', {
+                ...jwk,
+                key_ops: ['deriveKey'],
+                x: private_serial.slice(0, 43),
+                y: private_serial.slice(43, 86),
+                d: private_serial.slice(86, 129),
+            }, ecdh, true, ['deriveKey']);
+            const public_key = await $mol_crypto_native.subtle.importKey('jwk', {
+                ...jwk,
+                key_ops: [],
+                x: public_serial.slice(0, 43),
+                y: public_serial.slice(43, 86),
+            }, ecdh, true, []);
+            const secret = await $mol_crypto_native.subtle.deriveKey({
+                name: "ECDH",
+                public: public_key,
+            }, private_key, algorithm, true, ["encrypt", "decrypt"]);
+            return new this(secret);
+        }
+        async serial() {
+            return new Uint8Array(await $mol_crypto_native.subtle.exportKey('raw', this.native));
+        }
+        async encrypt(open, salt) {
+            return new Uint8Array(await $mol_crypto_native.subtle.encrypt({
+                ...algorithm,
+                iv: salt,
+            }, this.native, open));
+        }
+        async decrypt(closed, salt) {
+            return new Uint8Array(await $mol_crypto_native.subtle.decrypt({
+                ...algorithm,
+                iv: salt,
+            }, this.native, closed));
+        }
+    }
+    $.$mol_crypto_secret = $mol_crypto_secret;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crus_auth extends $mol_crypto_key_private {
+        static current(next) {
+            $mol_wire_solid();
+            if (next === undefined) {
+                const key = String($mol_state_local.value('$hyoo_crus_auth') ?? '');
+                if (key)
+                    return $hyoo_crus_auth.from(key);
+            }
+            if (!next)
+                next = this.grab();
+            $mol_state_local.value('$hyoo_crus_auth', next.toString());
+            return next;
+        }
+        static embryos = [];
+        static grab() {
+            if (this.embryos.length)
+                return this.from(this.embryos.pop());
+            return $mol_wire_sync(this).generate();
+        }
+        static async generate() {
+            for (let i = 0; i < 4096; ++i) {
+                const auth = await super.generate();
+                if (auth.uint8(0) !== $hyoo_crus_unit_kind.pass)
+                    continue;
+                return this.from(auth);
+            }
+            $mol_fail(new Error(`Too long key generation`));
+        }
+        lord() {
+            return $hyoo_crus_ref_decode(new Uint8Array(this.buffer, 2, 12));
+        }
+        peer() {
+            return $mol_base64_ae_encode(new Uint8Array(this.buffer, 2, 6));
+        }
+        secret_mutual(pub) {
+            return $mol_wire_sync($mol_crypto_secret).derive(this.toString(), pub.toString());
+        }
+    }
+    __decorate([
+        $mol_memo.method
+    ], $hyoo_crus_auth.prototype, "lord", null);
+    __decorate([
+        $mol_memo.method
+    ], $hyoo_crus_auth.prototype, "peer", null);
+    __decorate([
+        $mol_mem_key
+    ], $hyoo_crus_auth.prototype, "secret_mutual", null);
+    __decorate([
+        $mol_mem
+    ], $hyoo_crus_auth, "current", null);
+    $.$hyoo_crus_auth = $hyoo_crus_auth;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crus_face_map extends Map {
+        last = 0;
+        total = 0;
+        constructor(entries) {
+            super();
+            if (entries)
+                this.sync(entries);
+        }
+        sync(right) {
+            if (right instanceof $hyoo_crus_face_map)
+                this.total = right.total;
+            for (const [peer, time] of right)
+                this.time_max(peer, time);
+        }
+        time_max(peer, time) {
+            if (this.last < time)
+                this.last = time;
+            let prev = this.get(peer) ?? 0;
+            if (prev < time)
+                this.set(peer, time);
+        }
+        tick() {
+            return this.last = Math.max(this.last + 1, Date.now());
+        }
+        [$mol_dev_format_head]() {
+            return $mol_dev_format_span({}, $mol_dev_format_native(this), $mol_dev_format_shade(' ', this.total), $mol_dev_format_shade(' ', new Date(this.last)));
+        }
+    }
+    __decorate([
+        $mol_action
+    ], $hyoo_crus_face_map.prototype, "tick", null);
+    $.$hyoo_crus_face_map = $hyoo_crus_face_map;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_wire_set extends Set {
+        pub = new $mol_wire_pub;
+        has(value) {
+            this.pub.promote();
+            return super.has(value);
+        }
+        entries() {
+            this.pub.promote();
+            return super.entries();
+        }
+        keys() {
+            this.pub.promote();
+            return super.keys();
+        }
+        values() {
+            this.pub.promote();
+            return super.values();
+        }
+        forEach(task, self) {
+            this.pub.promote();
+            super.forEach(task, self);
+        }
+        [Symbol.iterator]() {
+            this.pub.promote();
+            return super[Symbol.iterator]();
+        }
+        get size() {
+            this.pub.promote();
+            return super.size;
+        }
+        add(value) {
+            if (super.has(value))
+                return this;
+            super.add(value);
+            this.pub.emit();
+            return this;
+        }
+        delete(value) {
+            const res = super.delete(value);
+            if (res)
+                this.pub.emit();
+            return res;
+        }
+        clear() {
+            if (!super.size)
+                return;
+            super.clear();
+            this.pub.emit();
+        }
+        item(val, next) {
+            if (next === undefined)
+                return this.has(val);
+            if (next)
+                this.add(val);
+            else
+                this.delete(val);
+            return next;
+        }
+    }
+    $.$mol_wire_set = $mol_wire_set;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    let $hyoo_crus_area;
+    (function ($hyoo_crus_area) {
+        $hyoo_crus_area[$hyoo_crus_area["data"] = 0] = "data";
+        $hyoo_crus_area[$hyoo_crus_area["meta"] = 1] = "meta";
+    })($hyoo_crus_area = $.$hyoo_crus_area || ($.$hyoo_crus_area = {}));
+    function $hyoo_crus_area_of(numb) {
+        const num = $mol_base64_ae_decode(numb || 'AAAAAAAA')[0];
+        return $hyoo_crus_area[num % 2];
+    }
+    $.$hyoo_crus_area_of = $hyoo_crus_area_of;
+    function $hyoo_crus_area_to(numb, area) {
+        const buf = $mol_base64_ae_decode(numb || 'AAAAAAAA');
+        buf[0] -= buf[0] % 2 - $hyoo_crus_area[area];
+        numb = $mol_base64_ae_encode(buf);
+        return numb;
+    }
+    $.$hyoo_crus_area_to = $hyoo_crus_area_to;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    let $hyoo_crus_rank;
+    (function ($hyoo_crus_rank) {
+        $hyoo_crus_rank[$hyoo_crus_rank["nil"] = 0] = "nil";
+        $hyoo_crus_rank[$hyoo_crus_rank["get"] = 1] = "get";
+        $hyoo_crus_rank[$hyoo_crus_rank["add"] = 3] = "add";
+        $hyoo_crus_rank[$hyoo_crus_rank["mod"] = 7] = "mod";
+        $hyoo_crus_rank[$hyoo_crus_rank["law"] = 15] = "law";
+    })($hyoo_crus_rank = $.$hyoo_crus_rank || ($.$hyoo_crus_rank = {}));
+    $.$hyoo_crus_rank_private = {
+        get: [],
+        add: [],
+        mod: [],
+        law: [null],
+    };
+    $.$hyoo_crus_rank_public = {
+        get: [$hyoo_crus_ref('')],
+        add: [],
+        mod: [],
+        law: [null],
+    };
+    $.$hyoo_crus_rank_lobby = {
+        get: [$hyoo_crus_ref('')],
+        add: [$hyoo_crus_ref('')],
+        mod: [],
+        law: [null],
+    };
+    $.$hyoo_crus_rank_orgy = {
+        get: [$hyoo_crus_ref('')],
+        add: [],
+        mod: [$hyoo_crus_ref('')],
+        law: [null],
+    };
 })($ || ($ = {}));
 
 ;
@@ -11122,163 +11455,9 @@ var $;
         signed() {
             return this.sign().some(b => b);
         }
+        _land = null;
     }
     $.$hyoo_crus_unit = $hyoo_crus_unit;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    const algorithm = {
-        name: 'AES-CBC',
-        length: 128,
-        tagLength: 32,
-    };
-    class $mol_crypto_secret extends Object {
-        native;
-        static size = 16;
-        constructor(native) {
-            super();
-            this.native = native;
-        }
-        static async generate() {
-            return new this(await $mol_crypto_native.subtle.generateKey(algorithm, true, ['encrypt', 'decrypt']));
-        }
-        static async from(serial) {
-            if (typeof serial === 'string') {
-                serial = $mol_charset_encode(serial);
-                serial = await $mol_crypto_native.subtle.digest('SHA-256', serial);
-            }
-            return new this(await $mol_crypto_native.subtle.importKey('raw', serial, algorithm, true, ['encrypt', 'decrypt']));
-        }
-        static async derive(private_serial, public_serial) {
-            const ecdh = { name: "ECDH", namedCurve: "P-256" };
-            const jwk = { crv: 'P-256', ext: true, kty: 'EC' };
-            const private_key = await $mol_crypto_native.subtle.importKey('jwk', {
-                ...jwk,
-                key_ops: ['deriveKey'],
-                x: private_serial.slice(0, 43),
-                y: private_serial.slice(43, 86),
-                d: private_serial.slice(86, 129),
-            }, ecdh, true, ['deriveKey']);
-            const public_key = await $mol_crypto_native.subtle.importKey('jwk', {
-                ...jwk,
-                key_ops: [],
-                x: public_serial.slice(0, 43),
-                y: public_serial.slice(43, 86),
-            }, ecdh, true, []);
-            const secret = await $mol_crypto_native.subtle.deriveKey({
-                name: "ECDH",
-                public: public_key,
-            }, private_key, algorithm, true, ["encrypt", "decrypt"]);
-            return new this(secret);
-        }
-        async serial() {
-            return await $mol_crypto_native.subtle.exportKey('raw', this.native);
-        }
-        async encrypt(open, salt) {
-            return await $mol_crypto_native.subtle.encrypt({
-                ...algorithm,
-                iv: salt,
-            }, this.native, open);
-        }
-        async decrypt(closed, salt) {
-            return await $mol_crypto_native.subtle.decrypt({
-                ...algorithm,
-                iv: salt,
-            }, this.native, closed);
-        }
-    }
-    $.$mol_crypto_secret = $mol_crypto_secret;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    class $hyoo_crus_pass extends $hyoo_crus_unit {
-        work() {
-            return this.uint8(1);
-        }
-        _lord;
-        lord(next) {
-            if (next === undefined && this._lord !== undefined)
-                return this._lord;
-            else
-                return this._lord = this.id12(2, next);
-        }
-        key() {
-            return this.id6(2);
-        }
-        auth(next) {
-            const prev = new Uint8Array(this.buffer, this.byteOffset, 64);
-            if (next)
-                prev.set(next);
-            return prev;
-        }
-        [$mol_dev_format_head]() {
-            return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', this.peer(), ' 🔑 ', $mol_dev_format_span({}, this.lord().description));
-        }
-    }
-    $.$hyoo_crus_pass = $hyoo_crus_pass;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    let $hyoo_crus_rang;
-    (function ($hyoo_crus_rang) {
-        $hyoo_crus_rang[$hyoo_crus_rang["nil"] = 0] = "nil";
-        $hyoo_crus_rang[$hyoo_crus_rang["get"] = 1] = "get";
-        $hyoo_crus_rang[$hyoo_crus_rang["add"] = 3] = "add";
-        $hyoo_crus_rang[$hyoo_crus_rang["mod"] = 7] = "mod";
-        $hyoo_crus_rang[$hyoo_crus_rang["law"] = 15] = "law";
-    })($hyoo_crus_rang = $.$hyoo_crus_rang || ($.$hyoo_crus_rang = {}));
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    class $hyoo_crus_gift extends $hyoo_crus_unit {
-        rang(next) {
-            if (next !== undefined)
-                this.uint8(0, $hyoo_crus_unit_kind.gift);
-            next = this.uint8(1, next);
-            if (next < $hyoo_crus_rang.get || next > $hyoo_crus_rang.law) {
-                $mol_fail(new RangeError(`Wrong rang ${next}`));
-            }
-            return next;
-        }
-        time(next) {
-            return this.uint48(8, next);
-        }
-        free() {
-            return new Uint8Array(this.buffer, this.byteOffset + 26, 6);
-        }
-        _dest;
-        dest(next) {
-            if (next === undefined && this._dest !== undefined)
-                return this._dest;
-            else
-                return this._dest = this.id12(14, next);
-        }
-        key() {
-            return this.dest().description;
-        }
-        bill() {
-            return new Uint8Array(this.buffer, this.byteOffset + 32, 32);
-        }
-        static compare(left, right) {
-            return (right.time() - left.time()) || (right.peer() > left.peer() ? 1 : right.peer() < left.peer() ? -1 : 0);
-        }
-        [$mol_dev_format_head]() {
-            return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', this.peer(), ' 🏅 ', $mol_dev_format_span({}, this.dest().description), this.bill().some(v => v) ? ' 🔐' : ' 📢', $hyoo_crus_rang[this.rang()], ' ', $mol_dev_format_shade(new $mol_time_moment(this.time()).toString('YYYY-MM-DD hh:mm:ss.sss')));
-        }
-    }
-    $.$hyoo_crus_gift = $hyoo_crus_gift;
 })($ || ($ = {}));
 
 ;
@@ -11668,181 +11847,6 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    class $hyoo_crus_auth extends $mol_crypto_key_private {
-        static current() {
-            $mol_wire_solid();
-            let key = String($mol_state_local.value('$hyoo_crus_auth') ?? '');
-            if (key)
-                return $hyoo_crus_auth.from(key);
-            const auth = $mol_wire_sync(this).generate();
-            $mol_state_local.value('$hyoo_crus_auth', auth.toString());
-            return auth;
-        }
-        static async generate() {
-            for (let i = 0; i < 4096; ++i) {
-                const auth = await super.generate();
-                if (auth.uint8(0) !== $hyoo_crus_unit_kind.pass)
-                    continue;
-                return this.from(auth);
-            }
-            $mol_fail(new Error(`Too long key generation`));
-        }
-        lord() {
-            return $hyoo_crus_ref_decode(new Uint8Array(this.buffer, 2, 12));
-        }
-        peer() {
-            return $mol_base64_ae_encode(new Uint8Array(this.buffer, 2, 6));
-        }
-        secret_mutual(pub) {
-            return $mol_wire_sync($mol_crypto_secret).derive(this.toString(), pub.toString());
-        }
-    }
-    __decorate([
-        $mol_memo.method
-    ], $hyoo_crus_auth.prototype, "lord", null);
-    __decorate([
-        $mol_memo.method
-    ], $hyoo_crus_auth.prototype, "peer", null);
-    __decorate([
-        $mol_mem_key
-    ], $hyoo_crus_auth.prototype, "secret_mutual", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_auth, "current", null);
-    $.$hyoo_crus_auth = $hyoo_crus_auth;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    class $hyoo_crus_face_map extends Map {
-        last = 0;
-        total = 0;
-        constructor(entries) {
-            super();
-            if (entries)
-                this.sync(entries);
-        }
-        sync(right) {
-            if (right instanceof $hyoo_crus_face_map)
-                this.total = right.total;
-            for (const [peer, time] of right)
-                this.time_max(peer, time);
-        }
-        time_max(peer, time) {
-            if (this.last < time)
-                this.last = time;
-            let prev = this.get(peer) ?? 0;
-            if (prev < time)
-                this.set(peer, time);
-        }
-        tick() {
-            return this.last = Math.max(this.last + 1, Date.now());
-        }
-        [$mol_dev_format_head]() {
-            return $mol_dev_format_span({}, $mol_dev_format_native(this), $mol_dev_format_shade(' ', this.total), $mol_dev_format_shade(' ', new Date(this.last)));
-        }
-    }
-    __decorate([
-        $mol_action
-    ], $hyoo_crus_face_map.prototype, "tick", null);
-    $.$hyoo_crus_face_map = $hyoo_crus_face_map;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    class $mol_wire_set extends Set {
-        pub = new $mol_wire_pub;
-        has(value) {
-            this.pub.promote();
-            return super.has(value);
-        }
-        entries() {
-            this.pub.promote();
-            return super.entries();
-        }
-        keys() {
-            this.pub.promote();
-            return super.keys();
-        }
-        values() {
-            this.pub.promote();
-            return super.values();
-        }
-        forEach(task, self) {
-            this.pub.promote();
-            super.forEach(task, self);
-        }
-        [Symbol.iterator]() {
-            this.pub.promote();
-            return super[Symbol.iterator]();
-        }
-        get size() {
-            this.pub.promote();
-            return super.size;
-        }
-        add(value) {
-            if (super.has(value))
-                return this;
-            super.add(value);
-            this.pub.emit();
-            return this;
-        }
-        delete(value) {
-            const res = super.delete(value);
-            if (res)
-                this.pub.emit();
-            return res;
-        }
-        clear() {
-            if (!super.size)
-                return;
-            super.clear();
-            this.pub.emit();
-        }
-        item(val, next) {
-            if (next === undefined)
-                return this.has(val);
-            if (next)
-                this.add(val);
-            else
-                this.delete(val);
-            return next;
-        }
-    }
-    $.$mol_wire_set = $mol_wire_set;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    let $hyoo_crus_area;
-    (function ($hyoo_crus_area) {
-        $hyoo_crus_area[$hyoo_crus_area["data"] = 0] = "data";
-        $hyoo_crus_area[$hyoo_crus_area["meta"] = 1] = "meta";
-    })($hyoo_crus_area = $.$hyoo_crus_area || ($.$hyoo_crus_area = {}));
-    function $hyoo_crus_area_of(numb) {
-        const num = $mol_base64_ae_decode(numb || 'AAAAAAAA')[0];
-        return $hyoo_crus_area[num % 2];
-    }
-    $.$hyoo_crus_area_of = $hyoo_crus_area_of;
-    function $hyoo_crus_area_to(numb, area) {
-        const buf = $mol_base64_ae_decode(numb || 'AAAAAAAA');
-        buf[0] -= buf[0] % 2 - $hyoo_crus_area[area];
-        numb = $mol_base64_ae_encode(buf);
-        return numb;
-    }
-    $.$hyoo_crus_area_to = $hyoo_crus_area_to;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
     class $hyoo_crus_node extends $mol_object {
         static tag = $hyoo_crus_gist_tag[$hyoo_crus_gist_tag.vals];
         land() {
@@ -11851,17 +11855,14 @@ var $;
         head() {
             return '';
         }
-        lord() {
-            return this.land().lord();
-        }
         realm() {
-            return this.lord()?.realm() ?? null;
+            return this.land()?.realm() ?? null;
         }
-        lord_ref() {
-            return this.lord()?.ref() ?? this.$.$hyoo_crus_auth.current().lord();
+        land_ref() {
+            return this.land()?.ref() ?? this.$.$hyoo_crus_auth.current().lord();
         }
         ref() {
-            return $hyoo_crus_ref(this.lord_ref().description + '_' + (this.land().numb() || '') + '_' + this.head());
+            return $hyoo_crus_ref(this.land_ref().description + '_' + this.head());
         }
         toJSON() {
             return this.ref().description;
@@ -11880,13 +11881,13 @@ var $;
             return this.units().map(unit => map[unit.tag()]().Item(unit.self()));
         }
         units() {
-            return this.land().gists_ordered(this.head());
+            return this.land().gists_ordered(this.head()).filter(unit => !unit.nil());
         }
         filled() {
             return this.units().length > 0;
         }
         can_change(lord = this.land().auth().lord()) {
-            return this.land().lord_rang(lord) >= $hyoo_crus_rang.add;
+            return this.land().lord_rank(lord) >= $hyoo_crus_rank.add;
         }
         last_change() {
             const land = this.land();
@@ -12206,11 +12207,11 @@ var $;
             bin: vary => BigInt(vary.length),
             bool: vary => BigInt(vary),
             int: vary => vary,
-            real: vary => Number.isFinite(vary) ? BigInt(Math.trunc(vary)) : 0n,
+            real: vary => Number.isFinite(vary) ? BigInt(Math.trunc(vary)) : null,
             ref: vary => null,
             str: vary => {
                 try {
-                    return BigInt(vary);
+                    return vary ? BigInt(vary) : null;
                 }
                 catch {
                     return null;
@@ -12296,13 +12297,34 @@ var $;
             bin: vary => null,
             bool: vary => null,
             int: vary => new $mol_time_moment(Number(vary & 0xffffffffffffn)),
-            real: vary => new $mol_time_moment(vary),
+            real: vary => {
+                try {
+                    return new $mol_time_moment(vary);
+                }
+                catch {
+                    return null;
+                }
+            },
             ref: vary => null,
-            str: vary => new $mol_time_moment(vary),
+            str: vary => {
+                try {
+                    return vary ? new $mol_time_moment(vary) : null;
+                }
+                catch {
+                    return null;
+                }
+            },
             time: vary => vary,
             dur: vary => null,
             range: vary => null,
-            json: vary => new $mol_time_moment(vary),
+            json: vary => {
+                try {
+                    return new $mol_time_moment(vary);
+                }
+                catch {
+                    return null;
+                }
+            },
             jsan: vary => null,
             dom: vary => null,
             tree: vary => null,
@@ -12315,9 +12337,23 @@ var $;
             bin: vary => null,
             bool: vary => null,
             int: vary => new $mol_time_duration(Number(vary & 0xffffffffffffn)),
-            real: vary => new $mol_time_duration(vary),
+            real: vary => {
+                try {
+                    return new $mol_time_duration(vary);
+                }
+                catch {
+                    return null;
+                }
+            },
             ref: vary => null,
-            str: vary => new $mol_time_duration(vary),
+            str: vary => {
+                try {
+                    return new $mol_time_duration(vary);
+                }
+                catch {
+                    return null;
+                }
+            },
             time: vary => vary,
             dur: vary => null,
             range: vary => null,
@@ -12336,11 +12372,25 @@ var $;
             int: vary => null,
             real: vary => null,
             ref: vary => null,
-            str: vary => new $mol_time_interval(vary),
+            str: vary => {
+                try {
+                    return vary ? new $mol_time_interval(vary) : null;
+                }
+                catch {
+                    return null;
+                }
+            },
             time: vary => new $mol_time_interval({ start: vary, duration: 0 }),
             dur: vary => null,
             range: vary => vary,
-            json: vary => new $mol_time_moment(vary),
+            json: vary => {
+                try {
+                    return new $mol_time_interval(vary);
+                }
+                catch {
+                    return null;
+                }
+            },
             jsan: vary => null,
             dom: vary => null,
             tree: vary => null,
@@ -12350,19 +12400,31 @@ var $;
     function $hyoo_crus_vary_cast_json(vary) {
         return $hyoo_crus_vary_switch(vary, {
             nil: vary => null,
-            bin: vary => { bin: [...vary]; },
-            bool: vary => { bool: vary; },
-            int: vary => { int: Number(vary); },
-            real: vary => { real: vary; },
-            ref: vary => { ref: vary.description; },
-            str: vary => Object(JSON.parse(vary)),
+            bin: vary => null,
+            bool: vary => null,
+            int: vary => null,
+            real: vary => null,
+            ref: vary => null,
+            str: vary => {
+                if (!vary)
+                    return null;
+                try {
+                    const res = JSON.parse(vary);
+                    if (typeof res === 'object')
+                        return res;
+                    return null;
+                }
+                catch {
+                    return null;
+                }
+            },
             time: vary => ({ ...vary }),
             dur: vary => ({ ...vary }),
             range: vary => ({ ...vary }),
             json: vary => vary,
             jsan: vary => Object(vary[0]),
-            dom: vary => { dom: $mol_dom_serialize(vary); },
-            tree: vary => { tree: vary.toString(); },
+            dom: vary => null,
+            tree: vary => null,
         });
     }
     $.$hyoo_crus_vary_cast_json = $hyoo_crus_vary_cast_json;
@@ -12372,9 +12434,18 @@ var $;
             bin: vary => [...vary],
             bool: vary => [vary],
             int: vary => [vary.toString()],
-            real: vary => [vary],
+            real: vary => Number.isFinite(vary) ? [vary] : null,
             ref: vary => [vary.description],
-            str: vary => [].concat(JSON.parse(vary)),
+            str: vary => {
+                if (!vary)
+                    return null;
+                try {
+                    return [].concat(JSON.parse(vary));
+                }
+                catch {
+                    return [vary];
+                }
+            },
             time: vary => [vary.toJSON()],
             dur: vary => [vary.toJSON()],
             range: vary => [vary.toJSON()],
@@ -12393,7 +12464,16 @@ var $;
             int: vary => $mol_jsx("body", null, vary),
             real: vary => $mol_jsx("body", null, vary),
             ref: vary => $mol_jsx("body", null, vary.description),
-            str: vary => $mol_dom_parse(vary, 'application/xhtml+xml').documentElement,
+            str: vary => {
+                if (!vary)
+                    return null;
+                try {
+                    return vary ? $mol_dom_parse(vary, 'application/xhtml+xml').documentElement : null;
+                }
+                catch {
+                    return $mol_jsx("body", null, vary);
+                }
+            },
             time: vary => $mol_jsx("body", null, vary),
             dur: vary => $mol_jsx("body", null, vary),
             range: vary => $mol_jsx("body", null, vary),
@@ -12412,7 +12492,16 @@ var $;
             int: vary => $mol_tree2.struct(vary.toString()),
             real: vary => $mol_tree2.struct(vary.toString()),
             ref: vary => $mol_tree2.struct(vary.description),
-            str: vary => $$.$mol_tree2_from_string(vary),
+            str: vary => {
+                if (!vary)
+                    return null;
+                try {
+                    return $$.$mol_tree2_from_string(vary);
+                }
+                catch {
+                    return $$.$mol_tree2.data(vary);
+                }
+            },
             time: vary => $mol_tree2.struct(vary.toString()),
             dur: vary => $mol_tree2.struct(vary.toString()),
             range: vary => $mol_tree2.struct(vary.toString()),
@@ -12528,59 +12617,6 @@ var $;
             this.splice([vary], undefined, undefined, tag);
             return this.land().Node(Node).Item(this.units().at(-1).self());
         }
-        static of(tip) {
-            class Narrow extends $hyoo_crus_list {
-                static tip = tip;
-                value(next) {
-                    return this.items(next).map($hyoo_crus_vary_cast_funcs[tip]);
-                }
-            }
-            __decorate([
-                $mol_mem
-            ], Narrow.prototype, "value", null);
-            return Narrow;
-        }
-        static ref(Value) {
-            class Ref extends $hyoo_crus_list {
-                static Value = Value;
-                static toJSON() {
-                    return '$hyoo_crus_list.ref(()=>' + Value() + ')';
-                }
-                value(next) {
-                    return this.remote_list(next);
-                }
-                remote_list(next) {
-                    const realm = this.realm();
-                    const Node = Value();
-                    return this.items(next?.map(item => item.ref()))
-                        .map($hyoo_crus_vary_cast_ref)
-                        .filter($mol_guard_defined)
-                        .map(ref => realm.Node(ref, Node));
-                }
-                remote_make() {
-                    const land = this.realm().home().Land_new(0);
-                    this.splice([land.ref()]);
-                    return land.Node(Value()).Item('');
-                }
-                local_make(idea) {
-                    const area = $hyoo_crus_area_of(this.head());
-                    const self = this.land().self_make(area, idea);
-                    const node = this.land().Node(Value()).Item(self);
-                    this.splice([node.ref()]);
-                    return node;
-                }
-            }
-            __decorate([
-                $mol_mem
-            ], Ref.prototype, "remote_list", null);
-            __decorate([
-                $mol_action
-            ], Ref.prototype, "remote_make", null);
-            __decorate([
-                $mol_action
-            ], Ref.prototype, "local_make", null);
-            return Ref;
-        }
         ;
         [$mol_dev_format_head]() {
             return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', this.head(), ' ', $mol_dev_format_auto(this.items()));
@@ -12589,43 +12625,101 @@ var $;
     __decorate([
         $mol_mem
     ], $hyoo_crus_list.prototype, "items", null);
-    __decorate([
-        $mol_memo.method
-    ], $hyoo_crus_list, "of", null);
     $.$hyoo_crus_list = $hyoo_crus_list;
-    class $hyoo_crus_list_bin extends $hyoo_crus_list.of('bin') {
+    function $hyoo_crus_list_vary(parse) {
+        class Narrow extends $hyoo_crus_list {
+            static parse = parse;
+            value(next) {
+                return this.items(next?.map(parse)).map(parse);
+            }
+        }
+        __decorate([
+            $mol_mem
+        ], Narrow.prototype, "value", null);
+        return Narrow;
+    }
+    $.$hyoo_crus_list_vary = $hyoo_crus_list_vary;
+    class $hyoo_crus_list_bin extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_bin) {
     }
     $.$hyoo_crus_list_bin = $hyoo_crus_list_bin;
-    class $hyoo_crus_list_bool extends $hyoo_crus_list.of('bool') {
+    class $hyoo_crus_list_bool extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_bool) {
     }
     $.$hyoo_crus_list_bool = $hyoo_crus_list_bool;
-    class $hyoo_crus_list_int extends $hyoo_crus_list.of('int') {
+    class $hyoo_crus_list_int extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_int) {
     }
     $.$hyoo_crus_list_int = $hyoo_crus_list_int;
-    class $hyoo_crus_list_real extends $hyoo_crus_list.of('real') {
+    class $hyoo_crus_list_real extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_real) {
     }
     $.$hyoo_crus_list_real = $hyoo_crus_list_real;
-    class $hyoo_crus_list_ref extends $hyoo_crus_list.of('ref') {
+    class $hyoo_crus_list_ref extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_ref) {
     }
     $.$hyoo_crus_list_ref = $hyoo_crus_list_ref;
-    class $hyoo_crus_list_str extends $hyoo_crus_list.of('str') {
+    class $hyoo_crus_list_str extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_str) {
     }
     $.$hyoo_crus_list_str = $hyoo_crus_list_str;
-    class $hyoo_crus_list_time extends $hyoo_crus_list.of('time') {
+    class $hyoo_crus_list_time extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_time) {
     }
     $.$hyoo_crus_list_time = $hyoo_crus_list_time;
-    class $hyoo_crus_list_json extends $hyoo_crus_list.of('json') {
+    class $hyoo_crus_list_dur extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_dur) {
+    }
+    $.$hyoo_crus_list_dur = $hyoo_crus_list_dur;
+    class $hyoo_crus_list_range extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_range) {
+    }
+    $.$hyoo_crus_list_range = $hyoo_crus_list_range;
+    class $hyoo_crus_list_json extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_json) {
     }
     $.$hyoo_crus_list_json = $hyoo_crus_list_json;
-    class $hyoo_crus_list_jsan extends $hyoo_crus_list.of('jsan') {
+    class $hyoo_crus_list_jsan extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_jsan) {
     }
     $.$hyoo_crus_list_jsan = $hyoo_crus_list_jsan;
-    class $hyoo_crus_list_xml extends $hyoo_crus_list.of('dom') {
+    class $hyoo_crus_list_xml extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_dom) {
     }
     $.$hyoo_crus_list_xml = $hyoo_crus_list_xml;
-    class $hyoo_crus_list_tree extends $hyoo_crus_list.of('tree') {
+    class $hyoo_crus_list_tree extends $hyoo_crus_list_vary($hyoo_crus_vary_cast_tree) {
     }
     $.$hyoo_crus_list_tree = $hyoo_crus_list_tree;
+    function $hyoo_crus_list_ref_to(Value) {
+        class Ref extends $hyoo_crus_list {
+            static Value = Value;
+            static toJSON() {
+                return '$hyoo_crus_list_to(()=>' + Value() + ')';
+            }
+            value(next) {
+                return this.remote_list(next);
+            }
+            remote_list(next) {
+                const realm = this.realm();
+                const Node = Value();
+                return this.items(next?.map(item => item.ref()))
+                    .map($hyoo_crus_vary_cast_ref)
+                    .filter($mol_guard_defined)
+                    .map(ref => realm.Node(ref, Node));
+            }
+            remote_make(preset) {
+                const land = this.realm().land_grab(preset);
+                this.splice([land.ref()]);
+                return land.Node(Value()).Item('');
+            }
+            local_make(idea) {
+                const area = $hyoo_crus_area_of(this.head());
+                const self = this.land().self_make(area, idea);
+                const node = this.land().Node(Value()).Item(self);
+                this.splice([node.ref()]);
+                return node;
+            }
+        }
+        __decorate([
+            $mol_mem
+        ], Ref.prototype, "remote_list", null);
+        __decorate([
+            $mol_action
+        ], Ref.prototype, "remote_make", null);
+        __decorate([
+            $mol_action
+        ], Ref.prototype, "local_make", null);
+        return Ref;
+    }
+    $.$hyoo_crus_list_ref_to = $hyoo_crus_list_ref_to;
 })($ || ($ = {}));
 
 ;
@@ -12679,19 +12773,6 @@ var $;
             const unit = this.find(key);
             return unit ? this.land().Node(Node).Item(unit.self()) : null;
         }
-        static to(Value) {
-            return class Dict extends $hyoo_crus_dict {
-                Value = Value;
-                key(key) {
-                    this.has(key, true, Value.tag);
-                    const unit = this.find(key);
-                    return this.land().Node(this.Value).Item(unit.self());
-                }
-                static toString() {
-                    return '$hyoo_crus_dict.to(' + Value + ')';
-                }
-            };
-        }
         static with(schema) {
             const Entity = class Entity extends this {
             };
@@ -12701,7 +12782,11 @@ var $;
                         return this.dive(field, schema[Field], null);
                     } });
                 Object.defineProperty(Entity.prototype, field, {
-                    value: function (next) { return (next === undefined && !this.has(field)) ? null : this[Field].value(next); }
+                    value: function (next) {
+                        return (next === undefined && !this.has(field))
+                            ? null
+                            : this[Field].value(next);
+                    }
                 });
                 $mol_wire_field(Entity.prototype, Field);
             }
@@ -12730,6 +12815,22 @@ var $;
             return $mol_dev_format_tr({}, $mol_dev_format_td({}, $mol_dev_format_auto(this.key)), $mol_dev_format_td({}, ': '), $mol_dev_format_td({}, $mol_dev_format_auto(this.val)));
         }
     }
+    function $hyoo_crus_dict_to(Value) {
+        return class Dict extends $hyoo_crus_dict {
+            Value = Value;
+            key(key, auto) {
+                this.has(key, auto === undefined ? undefined : true, Value.tag);
+                const unit = this.find(key);
+                if (!unit)
+                    return null;
+                return this.land().Node(this.Value).Item(unit.self());
+            }
+            static toString() {
+                return '$hyoo_crus_dict_to(' + Value + ')';
+            }
+        };
+    }
+    $.$hyoo_crus_dict_to = $hyoo_crus_dict_to;
 })($ || ($ = {}));
 
 ;
@@ -12737,7 +12838,7 @@ var $;
 var $;
 (function ($) {
     class $hyoo_crus_meta extends $hyoo_crus_dict.with({
-        Inflow: $hyoo_crus_list.of('ref')
+        Inflow: $hyoo_crus_list_ref,
     }) {
     }
     $.$hyoo_crus_meta = $hyoo_crus_meta;
@@ -12761,6 +12862,80 @@ var $;
         $mol_mem_key
     ], $hyoo_crus_fund.prototype, "Item", null);
     $.$hyoo_crus_fund = $hyoo_crus_fund;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crus_pass extends $hyoo_crus_unit {
+        work() {
+            return this.uint8(1);
+        }
+        _lord;
+        lord(next) {
+            if (next === undefined && this._lord !== undefined)
+                return this._lord;
+            else
+                return this._lord = this.id12(2, next);
+        }
+        key() {
+            return this.id6(2);
+        }
+        auth(next) {
+            const prev = new Uint8Array(this.buffer, this.byteOffset, 64);
+            if (next)
+                prev.set(next);
+            return prev;
+        }
+        [$mol_dev_format_head]() {
+            return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', this.peer(), ' 🔑 ', $mol_dev_format_span({}, this.lord().description));
+        }
+    }
+    $.$hyoo_crus_pass = $hyoo_crus_pass;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $hyoo_crus_gift extends $hyoo_crus_unit {
+        rank(next) {
+            if (next !== undefined)
+                this.uint8(0, $hyoo_crus_unit_kind.gift);
+            next = this.uint8(1, next);
+            if (next < $hyoo_crus_rank.get || next > $hyoo_crus_rank.law) {
+                $mol_fail(new RangeError(`Wrong rank ${next}`));
+            }
+            return next;
+        }
+        time(next) {
+            return this.uint48(8, next);
+        }
+        free() {
+            return new Uint8Array(this.buffer, this.byteOffset + 26, 6);
+        }
+        _dest;
+        dest(next) {
+            if (next === undefined && this._dest !== undefined)
+                return this._dest;
+            else
+                return this._dest = this.id12(14, next);
+        }
+        key() {
+            return this.dest().description;
+        }
+        bill() {
+            return new Uint8Array(this.buffer, this.byteOffset + 32, 32);
+        }
+        static compare(left, right) {
+            return (right.time() - left.time()) || (right.peer() > left.peer() ? 1 : right.peer() < left.peer() ? -1 : 0);
+        }
+        [$mol_dev_format_head]() {
+            return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', this.peer(), ' 🏅 ', $mol_dev_format_span({}, this.dest().description), this.bill().some(v => v) ? ' 🔐' : ' 📢', $hyoo_crus_rank[this.rank()], ' ', $mol_dev_format_shade(new $mol_time_moment(this.time()).toString('YYYY-MM-DD hh:mm:ss.sss')));
+        }
+    }
+    $.$hyoo_crus_gift = $hyoo_crus_gift;
 })($ || ($ = {}));
 
 ;
@@ -13030,105 +13205,6 @@ var $;
             this.land().post('', unit_prev?.head() ?? this.head(), unit_prev?.self() ?? '', next);
             return this.value_vary();
         }
-        value_bool(next) {
-            return $hyoo_crus_vary_cast_bool(this.value_vary(next));
-        }
-        value_int(next) {
-            return $hyoo_crus_vary_cast_int(this.value_vary(next));
-        }
-        value_real(next) {
-            return $hyoo_crus_vary_cast_real(this.value_vary(next));
-        }
-        value_str(next) {
-            return $hyoo_crus_vary_cast_str(this.value_vary(next));
-        }
-        value_bin(next) {
-            return $hyoo_crus_vary_cast_bin(this.value_vary(next));
-        }
-        value_ref(next) {
-            return $hyoo_crus_vary_cast_ref(this.value_vary(next));
-        }
-        value_as(decode, next) {
-            if (next === undefined) {
-                try {
-                    return decode(this.value_str());
-                }
-                catch (error) {
-                    this.$.$mol_fail_log(error);
-                    return null;
-                }
-            }
-            else {
-                const str = `${next}`;
-                const res = decode(str);
-                this.value_vary(str);
-                return res;
-            }
-        }
-        yoke(vary, auto) {
-            const realm = this.realm();
-            const ref = this.value_ref();
-            if (ref)
-                return realm.Land(ref);
-            if (auto === undefined)
-                return null;
-            const hash = $mol_crypto_hash($hyoo_crus_vary_encode(vary).bin);
-            const numb = new Uint16Array($mol_base64_ae_decode(this.land().numb()).buffer);
-            const idea = new $mol_buffer(hash.buffer).uint32(0) + numb[0] + numb[1] * 2 ** 16 + numb[2] * 2 ** 32;
-            const land = realm.Lord(this.land().auth().lord()).Land_new(idea);
-            this.value_ref(land.ref());
-            return land;
-        }
-        static of(tip) {
-            class Narrow extends $hyoo_crus_reg {
-                static tip = tip;
-                value(next) {
-                    return $hyoo_crus_vary_cast_funcs[tip](this.value_vary(next));
-                }
-            }
-            __decorate([
-                $mol_mem
-            ], Narrow.prototype, "value", null);
-            return Narrow;
-        }
-        static ref(Value) {
-            class Ref extends $hyoo_crus_reg {
-                static Value = Value;
-                static toString() {
-                    return '$hyoo_crus_reg.ref(()=>' + Value() + ')';
-                }
-                value(next) {
-                    return this.remote(next);
-                }
-                remote(next) {
-                    const realm = this.realm();
-                    const ref = this.value_ref(next?.ref());
-                    if (!ref)
-                        return null;
-                    return realm.Node(ref, Value());
-                }
-                remote_ensure() {
-                    this.yoke(this.ref(), null);
-                    return this.remote();
-                }
-                local_ensure() {
-                    if (this.value_ref())
-                        return this.remote();
-                    const node = this.land().Node(Value()).Item(this.land().self_make($hyoo_crus_area_of(this.head())));
-                    return this.remote(node);
-                }
-            }
-            __decorate([
-                $mol_mem
-            ], Ref.prototype, "remote", null);
-            __decorate([
-                $mol_mem
-            ], Ref.prototype, "remote_ensure", null);
-            __decorate([
-                $mol_mem
-            ], Ref.prototype, "local_ensure", null);
-            return Ref;
-        }
         ;
         [$mol_dev_format_head]() {
             return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', this.head(), ' ', $mol_dev_format_auto(this.value_vary()));
@@ -13137,67 +13213,141 @@ var $;
     __decorate([
         $mol_mem
     ], $hyoo_crus_reg.prototype, "value_vary", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_reg.prototype, "value_bool", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_reg.prototype, "value_int", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_reg.prototype, "value_real", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_reg.prototype, "value_str", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_reg.prototype, "value_bin", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_reg.prototype, "value_ref", null);
-    __decorate([
-        $mol_mem_key
-    ], $hyoo_crus_reg.prototype, "value_as", null);
-    __decorate([
-        $mol_mem_key
-    ], $hyoo_crus_reg.prototype, "yoke", null);
-    __decorate([
-        $mol_memo.method
-    ], $hyoo_crus_reg, "of", null);
     $.$hyoo_crus_reg = $hyoo_crus_reg;
-    class $hyoo_crus_reg_bin extends $hyoo_crus_reg.of('bin') {
+    function $hyoo_crus_reg_enum(options) {
+        class Narrow extends $hyoo_crus_reg {
+            static options = options;
+            value(next) {
+                validate: if (next !== undefined) {
+                    for (const option of options) {
+                        if ($mol_compare_deep(option, next))
+                            break validate;
+                    }
+                    $mol_fail(new Error(`Wrong value (${$hyoo_crus_vary_cast_str(next)})`));
+                }
+                const val = this.value_vary(next);
+                for (const option of options) {
+                    if ($mol_compare_deep(option, val))
+                        return val;
+                }
+                return null;
+            }
+        }
+        __decorate([
+            $mol_mem
+        ], Narrow.prototype, "value", null);
+        return Narrow;
+    }
+    $.$hyoo_crus_reg_enum = $hyoo_crus_reg_enum;
+    function $hyoo_crus_reg_vary(parse) {
+        class Narrow extends $hyoo_crus_reg {
+            static parse = parse;
+            value(next) {
+                if (next !== undefined)
+                    parse(next);
+                const res = this.value_vary(next);
+                try {
+                    return parse(res);
+                }
+                catch {
+                    return null;
+                }
+            }
+        }
+        return Narrow;
+    }
+    $.$hyoo_crus_reg_vary = $hyoo_crus_reg_vary;
+    class $hyoo_crus_reg_bin extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_bin) {
     }
     $.$hyoo_crus_reg_bin = $hyoo_crus_reg_bin;
-    class $hyoo_crus_reg_bool extends $hyoo_crus_reg.of('bool') {
+    class $hyoo_crus_reg_bool extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_bool) {
     }
     $.$hyoo_crus_reg_bool = $hyoo_crus_reg_bool;
-    class $hyoo_crus_reg_int extends $hyoo_crus_reg.of('int') {
+    class $hyoo_crus_reg_int extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_int) {
     }
     $.$hyoo_crus_reg_int = $hyoo_crus_reg_int;
-    class $hyoo_crus_reg_real extends $hyoo_crus_reg.of('real') {
+    class $hyoo_crus_reg_real extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_real) {
     }
     $.$hyoo_crus_reg_real = $hyoo_crus_reg_real;
-    class $hyoo_crus_reg_ref extends $hyoo_crus_reg.of('ref') {
+    class $hyoo_crus_reg_ref extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_ref) {
     }
     $.$hyoo_crus_reg_ref = $hyoo_crus_reg_ref;
-    class $hyoo_crus_reg_str extends $hyoo_crus_reg.of('str') {
+    class $hyoo_crus_reg_str extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_str) {
     }
     $.$hyoo_crus_reg_str = $hyoo_crus_reg_str;
-    class $hyoo_crus_reg_time extends $hyoo_crus_reg.of('time') {
+    class $hyoo_crus_reg_time extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_time) {
     }
     $.$hyoo_crus_reg_time = $hyoo_crus_reg_time;
-    class $hyoo_crus_reg_json extends $hyoo_crus_reg.of('json') {
+    class $hyoo_crus_reg_dur extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_dur) {
+    }
+    $.$hyoo_crus_reg_dur = $hyoo_crus_reg_dur;
+    class $hyoo_crus_reg_range extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_range) {
+    }
+    $.$hyoo_crus_reg_range = $hyoo_crus_reg_range;
+    class $hyoo_crus_reg_json extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_json) {
     }
     $.$hyoo_crus_reg_json = $hyoo_crus_reg_json;
-    class $hyoo_crus_reg_jsan extends $hyoo_crus_reg.of('jsan') {
+    class $hyoo_crus_reg_jsan extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_jsan) {
     }
     $.$hyoo_crus_reg_jsan = $hyoo_crus_reg_jsan;
-    class $hyoo_crus_reg_xml extends $hyoo_crus_reg.of('dom') {
+    class $hyoo_crus_reg_xml extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_dom) {
     }
     $.$hyoo_crus_reg_xml = $hyoo_crus_reg_xml;
-    class $hyoo_crus_reg_tree extends $hyoo_crus_reg.of('tree') {
+    class $hyoo_crus_reg_tree extends $hyoo_crus_reg_vary($hyoo_crus_vary_cast_tree) {
     }
     $.$hyoo_crus_reg_tree = $hyoo_crus_reg_tree;
+    function $hyoo_crus_reg_ref_to(Value) {
+        class Ref extends $hyoo_crus_reg_ref {
+            static Value = Value;
+            static toString() {
+                return '$hyoo_crus_reg_ref_to(()=>' + Value() + ')';
+            }
+            value(next) {
+                return this.remote(next);
+            }
+            yoke(preset) {
+                const realm = this.realm();
+                const Ref = this.cast($hyoo_crus_reg_ref);
+                const ref = Ref.value();
+                if (ref)
+                    return realm.Land(ref);
+                if (preset === undefined)
+                    return null;
+                const land = realm.land_grab(preset);
+                Ref.value(land.ref());
+                return land;
+            }
+            remote(next) {
+                const realm = this.realm();
+                let ref = next?.ref();
+                ref = $hyoo_crus_vary_cast_ref(this.value_vary(ref));
+                if (!ref)
+                    return null;
+                return realm.Node(ref, Value());
+            }
+            remote_ensure(preset) {
+                this.yoke(preset);
+                return this.remote();
+            }
+            local_ensure() {
+                if (this.remote())
+                    return this.remote();
+                const node = this.land().Node(Value()).Item(this.land().self_make($hyoo_crus_area_of(this.head())));
+                return this.remote(node);
+            }
+        }
+        __decorate([
+            $mol_mem
+        ], Ref.prototype, "yoke", null);
+        __decorate([
+            $mol_mem
+        ], Ref.prototype, "remote", null);
+        __decorate([
+            $mol_mem
+        ], Ref.prototype, "local_ensure", null);
+        return Ref;
+    }
+    $.$hyoo_crus_reg_ref_to = $hyoo_crus_reg_ref_to;
 })($ || ($ = {}));
 
 ;
@@ -13205,23 +13355,14 @@ var $;
 var $;
 (function ($) {
     class $hyoo_crus_land extends $mol_object {
-        lord() {
+        realm() {
             return null;
         }
-        numb() {
-            return '';
-        }
-        lord_ref() {
-            return this.lord()?.ref() ?? this.auth().lord();
-        }
-        realm() {
-            return this.lord()?.realm() ?? null;
+        ref() {
+            return this.auth().lord();
         }
         auth() {
             return this.$.$hyoo_crus_auth.current();
-        }
-        ref() {
-            return $hyoo_crus_ref(this.lord_ref().description + '_' + this.numb());
         }
         faces = new $hyoo_crus_face_map;
         passes = new $mol_wire_dict();
@@ -13230,12 +13371,11 @@ var $;
         self_all = new $mol_wire_set();
         self_make(area, idea = Math.floor(Math.random() * 2 ** 48)) {
             const auth = this.auth();
-            const rang = this.lord_rang(auth.lord());
-            if (rang === $hyoo_crus_rang.add)
+            const rank = this.lord_rank(auth.lord());
+            if (rank === $hyoo_crus_rank.add)
                 return $hyoo_crus_area_to(auth.peer(), 'data');
-            if (rang === $hyoo_crus_rang.nil)
-                $mol_fail(new Error('Rang too low (nil)'));
-            const numb = this.numb();
+            if (rank === $hyoo_crus_rank.nil)
+                $mol_fail(new Error('Rank too low (nil)'));
             for (let i = 0; i < 4096; ++i) {
                 idea = (idea + 1) % 2 ** 48;
                 if (!idea)
@@ -13243,14 +13383,18 @@ var $;
                 if ($hyoo_crus_area[idea % 2] !== area)
                     continue;
                 const idea_str = $mol_base64_ae_encode(new Uint8Array(new BigUint64Array([BigInt(idea)]).buffer, 0, 6));
-                if (idea_str === numb)
-                    continue;
                 if (this.self_all.has(idea_str))
                     continue;
                 this.self_all.add(idea_str);
                 return idea_str;
             }
             $mol_fail(new Error(`Too long self generation`));
+        }
+        base() {
+            return this.Data($hyoo_crus_base);
+        }
+        Profile(app, Node, preset) {
+            return this.base().profile(app, preset)?.Data(Node) ?? null;
         }
         Data(Node) {
             return this.Node(Node).Item('');
@@ -13277,18 +13421,30 @@ var $;
         joined_list() {
             return [...this.passes.values()].map(unit => unit.lord());
         }
-        lord_rang(lord) {
-            if (lord === this.lord_ref())
-                return $hyoo_crus_rang.law;
-            return this.gifts.get(lord)?.rang()
-                ?? this.gifts.get($hyoo_crus_ref('FFFFFFFF_FFFFFFFF'))?.rang()
-                ?? $hyoo_crus_rang.get;
+        key() {
+            const pass = this.passes.get($hyoo_crus_ref_peer(this.ref()));
+            if (!pass)
+                return null;
+            return $hyoo_crus_auth.from(pass.auth());
         }
-        peer_rang(peer) {
+        lord_rank(lord, next) {
+            if (lord === this.ref())
+                return $hyoo_crus_rank.law;
+            const prev = this.gifts.get(lord)?.rank()
+                ?? this.gifts.get($hyoo_crus_ref(''))?.rank()
+                ?? $hyoo_crus_rank.get;
+            if (next === undefined)
+                return prev;
+            if (next === prev)
+                return prev;
+            this.give(lord, next);
+            return next;
+        }
+        peer_rank(peer) {
             const auth = this.passes.get(peer);
             if (!auth)
-                return $hyoo_crus_rang.get;
-            return this.lord_rang(auth.lord());
+                return $hyoo_crus_rank.get;
+            return this.lord_rank(auth.lord());
         }
         delta_unit(face = new $hyoo_crus_face_map) {
             this.loading();
@@ -13415,7 +13571,7 @@ var $;
                         this.faces.time_max(next.peer(), next.time());
                         if (!prev)
                             this.faces.total++;
-                        if ((prev?.rang() ?? $hyoo_crus_rang.get) > next.rang())
+                        if ((prev?.rank() ?? $hyoo_crus_rank.get) > next.rank())
                             need_recheck = true;
                     },
                     gist: next => {
@@ -13466,37 +13622,41 @@ var $;
         }
         check_unit(unit) {
             return unit.choose({
-                pass: next => this.lord_rang(next.lord()) < $hyoo_crus_rang.add ? 'Need add rang to join' : '',
-                gift: next => this.peer_rang(next.peer()) < $hyoo_crus_rang.law ? 'Need law rang to change rang' : '',
+                pass: next => this.lord_rank(next.lord()) < $hyoo_crus_rank.add ? 'Need add rank to join' : '',
+                gift: next => this.peer_rank(next.peer()) < $hyoo_crus_rank.law ? 'Need law rank to change rank' : '',
                 gist: next => {
                     if ($hyoo_crus_area_of(next.self()) !== $hyoo_crus_area_of(next.self()))
                         return 'Need same area';
                     if ($hyoo_crus_area_to(next.peer(), 'data') === next.self()) {
-                        return this.peer_rang(next.peer()) < $hyoo_crus_rang.add ? 'Need add rang to post self data' : '';
+                        return this.peer_rank(next.peer()) < $hyoo_crus_rank.add ? 'Need add rank to post self data' : '';
                     }
                     else {
                         if ($hyoo_crus_area_of(next.self()) === 'data') {
-                            return this.peer_rang(next.peer()) < $hyoo_crus_rang.mod ? 'Need mod rang to post any data' : '';
+                            return this.peer_rank(next.peer()) < $hyoo_crus_rank.mod ? 'Need mod rank to post any data' : '';
                         }
                         else {
-                            return this.peer_rang(next.peer()) < $hyoo_crus_rang.law ? 'Need law rang to post to meta area' : '';
+                            return this.peer_rank(next.peer()) < $hyoo_crus_rank.law ? 'Need law rank to post to meta area' : '';
                         }
                     }
                 },
             });
         }
-        fork() {
+        fork(preset = $hyoo_crus_rank_public) {
             const realm = this.realm();
             if (!realm)
                 $mol_fail(new Error('Realm is required to fork'));
-            const land = realm.home().Land_new(0);
+            const land = realm.land_grab(preset);
             land.Meta().Inflow.items([this.ref()]);
             return land;
         }
         gists_ordered(head) {
             this.sync();
             const queue = [...this.gists.get(head)?.values() ?? []];
-            merge: if (this.numb() && $hyoo_crus_area_of(head) === 'data') {
+            const res = [];
+            const slices = new WeakMap;
+            for (const gist of queue)
+                slices.set(gist, 0);
+            merge: if ($hyoo_crus_area_of(head) === 'data') {
                 const inflow = (this.Meta().inflow()?.slice().reverse() ?? [])
                     .map($hyoo_crus_vary_cast_ref)
                     .filter($mol_guard_defined);
@@ -13504,21 +13664,26 @@ var $;
                     break merge;
                 const exists = new Set([...this.gists.get(head)?.keys() ?? []]);
                 const realm = this.realm();
+                let slice = 0;
                 if (realm)
                     for (const ref of inflow) {
+                        ++slice;
                         const land = realm.Land(ref);
                         for (const gist of land.gists_ordered(head)) {
                             if (exists.has(gist.self()))
                                 continue;
                             queue.push(gist);
                             exists.add(gist.self());
+                            slices.set(gist, slice);
                         }
                     }
             }
             if (queue.length < 2)
                 return queue.filter(unit => !unit.nil());
-            queue.sort($hyoo_crus_gist.compare);
-            const res = [];
+            const compare = (left, right) => {
+                return (slices.get(left) - slices.get(right)) || $hyoo_crus_gist.compare(left, right);
+            };
+            queue.sort(compare);
             const locate = (self) => {
                 for (let i = res.length - 1; i >= 0; --i) {
                     if (res[i].self() === self)
@@ -13536,7 +13701,7 @@ var $;
                         if (!index)
                             continue;
                     }
-                    while (res[index] && ($hyoo_crus_gist.compare(res[index], kid) < 0))
+                    while (res[index] && (compare(res[index], kid) < 0))
                         ++index;
                     const exists = locate(kid.self());
                     if (index === exists) {
@@ -13555,7 +13720,7 @@ var $;
                     cursor = queue.length;
                 }
             }
-            return res.filter(unit => !unit.nil());
+            return res;
         }
         join() {
             const auth = this.auth();
@@ -13564,20 +13729,22 @@ var $;
                 return prev;
             const next = new $hyoo_crus_pass;
             next.auth(auth.public().asArray());
+            next._land = this;
             const error = this.apply_unit_trust([next])[0];
             if (error)
                 $mol_fail(new Error(error));
             this.broadcast();
             return next;
         }
-        give(dest, rang) {
+        give(dest, rank) {
             this.join();
             const auth = this.auth();
             const unit = new $hyoo_crus_gift;
-            unit.rang(rang);
+            unit.rank(rank);
             unit.time(this.faces.tick());
             unit.peer(auth.peer());
-            unit.dest(dest ?? $hyoo_crus_ref('FFFFFFFF_FFFFFFFF'));
+            unit.dest(dest);
+            unit._land = this;
             const error = this.apply_unit_trust([unit])[0];
             if (error)
                 $mol_fail(new Error(error));
@@ -13595,6 +13762,7 @@ var $;
             unit.lead(lead);
             unit.head(head);
             unit._vary = vary;
+            unit._land = this;
             let { tip, bin } = $hyoo_crus_vary_encode(vary);
             unit._open = bin;
             if (vary !== null && this.encrypted()) {
@@ -13616,7 +13784,7 @@ var $;
         gist_move(gist, head, seat) {
             if (gist.nil())
                 $mol_fail(new RangeError(`Can't move wiped gist`));
-            const units = this.gists_ordered(head);
+            const units = this.gists_ordered(head).filter(unit => !unit.nil());
             if (seat > units.length)
                 $mol_fail(new RangeError(`Seat (${seat}) out of units length (${units.length})`));
             const lead = seat ? units[seat - 1].self() : '';
@@ -13638,7 +13806,7 @@ var $;
             this.post(lead, head, gist.self(), vary, gist.tag());
         }
         gist_wipe(gist) {
-            const units = this.gists_ordered(gist.head());
+            const units = this.gists_ordered(gist.head()).filter(unit => !unit.nil());
             const seat = units.indexOf(gist);
             this.post(seat ? units[seat - 1].self() : '', gist.head(), gist.self(), null, 'term');
         }
@@ -13669,13 +13837,16 @@ var $;
         }
         loading() {
             $mol_wire_solid();
-            const units = this.realm()?.yard().load(this) ?? [];
+            const realm = this.realm();
+            if (!realm)
+                return;
+            const units = realm.yard().load(this) ?? [];
             $mol_wire_sync(this.$).$mol_log3_rise({
                 place: this,
                 message: 'Load Unit',
                 units: units.length,
             });
-            const errors = this.apply_unit(units, !!'skip_check').filter(Boolean);
+            const errors = this.apply_unit_trust(units, !!'skip_check').filter(Boolean);
             if (errors.length)
                 this.$.$mol_log3_fail({
                     place: this,
@@ -13684,6 +13855,9 @@ var $;
         }
         saving() {
             this.$.$mol_wait_timeout(250);
+            this.save();
+        }
+        save() {
             const yard = this.realm()?.yard();
             if (!yard)
                 return;
@@ -13721,8 +13895,8 @@ var $;
         unit_sign(unit) {
             if (unit.signed())
                 return;
-            const key = $mol_wire_sync(this.auth());
-            const mixin = $hyoo_crus_ref_encode(this.ref());
+            const key = $mol_wire_sync(unit._land.auth());
+            const mixin = $hyoo_crus_ref_encode(unit._land.ref());
             const sens = unit.sens().slice();
             for (let i = 0; i < mixin.length; ++i)
                 sens[i + 14] ^= mixin[i + 14];
@@ -13735,7 +13909,7 @@ var $;
             if (gist.nil())
                 return gist;
             let bin = gist._open;
-            const secret = this.secret();
+            const secret = gist._land.secret();
             if (secret)
                 bin = new Uint8Array($mol_wire_sync(secret).encrypt(bin, gist.salt()));
             if (bin.byteLength > 32)
@@ -13795,9 +13969,7 @@ var $;
         }
         encrypted(next) {
             $mol_wire_solid();
-            if (!this.numb())
-                return false;
-            const gift = this.gifts.get(this.lord_ref());
+            const gift = this.gifts.get(this.ref());
             const prev = gift?.bill().some(b => b) ?? false;
             if (next === undefined)
                 return prev;
@@ -13811,7 +13983,7 @@ var $;
             const secret_land = $mol_wire_sync(secret).serial();
             const secret_mutual = auth.secret_mutual(auth.public().toString());
             const unit = new $hyoo_crus_gift;
-            unit.rang($hyoo_crus_rang.law);
+            unit.rank($hyoo_crus_rank.law);
             unit.time(this.faces.tick());
             unit.peer(auth.peer());
             unit.dest(auth.lord());
@@ -13864,7 +14036,7 @@ var $;
         }
         ;
         [$mol_dev_format_head]() {
-            return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', this.numb());
+            return $mol_dev_format_span({}, $mol_dev_format_native(this), ' ', $mol_dev_format_auto(this.faces.total));
         }
     }
     __decorate([
@@ -13886,8 +14058,11 @@ var $;
         $mol_mem
     ], $hyoo_crus_land.prototype, "joined_list", null);
     __decorate([
+        $mol_mem
+    ], $hyoo_crus_land.prototype, "key", null);
+    __decorate([
         $mol_mem_key
-    ], $hyoo_crus_land.prototype, "lord_rang", null);
+    ], $hyoo_crus_land.prototype, "lord_rank", null);
     __decorate([
         $mol_action
     ], $hyoo_crus_land.prototype, "faces_pack", null);
@@ -13958,104 +14133,6 @@ var $;
         $mol_mem
     ], $hyoo_crus_land.prototype, "secret", null);
     $.$hyoo_crus_land = $hyoo_crus_land;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    class $hyoo_crus_base extends $hyoo_crus_dict {
-        title(next) {
-            return this.dive('title', $hyoo_crus_reg, next)?.value_str(next) ?? '';
-        }
-        selection(next) {
-            return this.dive('selection', $hyoo_crus_reg, next)?.value_str(next) ?? '';
-        }
-        profiles() {
-            return this.dive('profiles', $hyoo_crus_dict)?.keys() ?? [];
-        }
-        Profile(app, auto) {
-            return this.dive('profiles', $hyoo_crus_dict, auto)
-                ?.dive(app, $hyoo_crus_reg, auto)
-                ?.yoke(app, auto)
-                ?? null;
-        }
-    }
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_base.prototype, "title", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_base.prototype, "selection", null);
-    __decorate([
-        $mol_mem
-    ], $hyoo_crus_base.prototype, "profiles", null);
-    __decorate([
-        $mol_mem_key
-    ], $hyoo_crus_base.prototype, "Profile", null);
-    $.$hyoo_crus_base = $hyoo_crus_base;
-})($ || ($ = {}));
-
-;
-"use strict";
-var $;
-(function ($) {
-    class $hyoo_crus_lord extends $mol_object {
-        realm() {
-            return null;
-        }
-        ref() {
-            return this.$.$hyoo_crus_auth.current().lord();
-        }
-        lands = new $mol_wire_dict();
-        base() {
-            return this.Land('').Data($hyoo_crus_base);
-        }
-        toString() {
-            return this.ref().description;
-        }
-        Land(numb) {
-            if (numb === 'AAAAAAAA')
-                return this.Land('');
-            let land = this.lands.get(numb);
-            if (land)
-                return land;
-            land = $hyoo_crus_land.make({
-                lord: $mol_const(this),
-                numb: $mol_const(numb),
-            });
-            this.lands.set(numb, land);
-            return land;
-        }
-        Land_new(idea) {
-            return this.Land(this.numb_make(idea || undefined));
-        }
-        Profile(app, Node, auto) {
-            return this.base().Profile(app, auto)?.Data(Node) ?? null;
-        }
-        numb_make(idea = Math.floor(Math.random() * 2 ** 48)) {
-            for (let i = 0; i < 4096; ++i) {
-                idea = (idea + 1) % 2 ** 48;
-                if (!idea)
-                    continue;
-                const idea_str = $mol_base64_ae_encode(new Uint8Array(new BigUint64Array([BigInt(idea)]).buffer, 0, 6));
-                if (this.lands.has(idea_str))
-                    continue;
-                return idea_str;
-            }
-            $mol_fail(new Error(`Too long numb generation`));
-        }
-    }
-    __decorate([
-        $mol_mem_key
-    ], $hyoo_crus_lord.prototype, "Land", null);
-    __decorate([
-        $mol_action
-    ], $hyoo_crus_lord.prototype, "Land_new", null);
-    __decorate([
-        $mol_action
-    ], $hyoo_crus_lord.prototype, "numb_make", null);
-    $.$hyoo_crus_lord = $hyoo_crus_lord;
 })($ || ($ = {}));
 
 ;
@@ -14198,6 +14275,166 @@ var $;
 "use strict";
 var $;
 (function ($) {
+    class $mol_rest_port_ws extends $mol_rest_port {
+    }
+    $.$mol_rest_port_ws = $mol_rest_port_ws;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    let $mol_websocket_frame_op;
+    (function ($mol_websocket_frame_op) {
+        $mol_websocket_frame_op[$mol_websocket_frame_op["con"] = 0] = "con";
+        $mol_websocket_frame_op[$mol_websocket_frame_op["txt"] = 1] = "txt";
+        $mol_websocket_frame_op[$mol_websocket_frame_op["bin"] = 2] = "bin";
+        $mol_websocket_frame_op[$mol_websocket_frame_op["stop"] = 8] = "stop";
+        $mol_websocket_frame_op[$mol_websocket_frame_op["ping"] = 9] = "ping";
+        $mol_websocket_frame_op[$mol_websocket_frame_op["pong"] = 10] = "pong";
+    })($mol_websocket_frame_op = $.$mol_websocket_frame_op || ($.$mol_websocket_frame_op = {}));
+    class $mol_websocket_frame extends $mol_buffer {
+        kind(next) {
+            if (next) {
+                this.setUint8(0, Number(next.fin) << 7 | $mol_websocket_frame_op[next.op]);
+                return next;
+            }
+            else {
+                const state = this.getUint8(0);
+                const fin = state >> 7;
+                const op = $mol_websocket_frame_op[state & 0b1111];
+                if (op === undefined)
+                    $mol_fail(new Error(`Wrong op (${state.toString(2)})`));
+                return { op, fin };
+            }
+        }
+        data(next) {
+            if (next === undefined) {
+                const state = this.getUint8(1);
+                const mask = state >> 7;
+                let size = state & 0b0111_1111;
+                if (size === 126)
+                    size = this.getUint16(2);
+                else if (size === 127)
+                    size = this.getUint32(6);
+                return { size, mask };
+            }
+            else {
+                if (next.size >= 2 ** 16) {
+                    this.setUint8(1, 127 | Number(next.mask) << 7);
+                    this.setUint32(6, next.size);
+                }
+                else if (next.size >= 126) {
+                    this.setUint8(1, 126 | Number(next.mask) << 7);
+                    this.setUint16(2, next.size);
+                }
+                else {
+                    this.setUint8(1, next.size | Number(next.mask) << 7);
+                }
+                return next;
+            }
+        }
+        size() {
+            const short = this.getUint8(1) & 0b0111_1111;
+            const mask = this.getUint8(1) >> 7;
+            return (short === 127 ? 10 : short === 126 ? 4 : 2) + (mask ? 4 : 0);
+        }
+        mask() {
+            return new Uint8Array(this.buffer, this.byteOffset + this.size() - 4, 4);
+        }
+        toString() {
+            const { op, fin } = this.kind();
+            const { size, mask } = this.data();
+            return `${op}${fin ? '!' : '+'}${size}${mask ? '@' : '#'}`;
+        }
+        static make(op, size = 0, mask = false, fin = true) {
+            const head = (size >= 2 ** 16 ? 10 : size >= 126 ? 4 : 2) + (mask ? 4 : 0);
+            const frame = $mol_websocket_frame.from(head);
+            frame.kind({ op, fin });
+            frame.data({ size, mask });
+            return frame;
+        }
+    }
+    $.$mol_websocket_frame = $mol_websocket_frame;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_rest_port_ws_std extends $mol_rest_port_ws {
+        socket;
+        send_nil() {
+            if (this.socket.readyState !== this.socket.OPEN)
+                return;
+            this.socket.send('');
+        }
+        send_bin(data) {
+            if (this.socket.readyState !== this.socket.OPEN)
+                return;
+            this.socket.send(data);
+        }
+        send_text(data) {
+            if (this.socket.readyState !== this.socket.OPEN)
+                return;
+            const bin = $mol_charset_encode(data);
+            this.socket.send(bin);
+        }
+    }
+    __decorate([
+        $mol_action
+    ], $mol_rest_port_ws_std.prototype, "send_nil", null);
+    __decorate([
+        $mol_action
+    ], $mol_rest_port_ws_std.prototype, "send_bin", null);
+    __decorate([
+        $mol_action
+    ], $mol_rest_port_ws_std.prototype, "send_text", null);
+    $.$mol_rest_port_ws_std = $mol_rest_port_ws_std;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
+    class $mol_rest_port_ws_node extends $mol_rest_port_ws {
+        socket;
+        send_nil() {
+            if (this.socket.writableEnded)
+                return;
+            this.socket.write($mol_websocket_frame.make('pong', 0).asArray());
+        }
+        send_bin(data) {
+            if (this.socket.writableEnded)
+                return;
+            this.socket.write($mol_websocket_frame.make('bin', data.byteLength).asArray());
+            this.socket.write(data);
+        }
+        send_text(data) {
+            if (this.socket.writableEnded)
+                return;
+            const bin = $mol_charset_encode(data);
+            this.socket.write($mol_websocket_frame.make('txt', bin.byteLength).asArray());
+            this.socket.write(bin);
+        }
+    }
+    __decorate([
+        $mol_action
+    ], $mol_rest_port_ws_node.prototype, "send_nil", null);
+    __decorate([
+        $mol_action
+    ], $mol_rest_port_ws_node.prototype, "send_bin", null);
+    __decorate([
+        $mol_action
+    ], $mol_rest_port_ws_node.prototype, "send_text", null);
+    $.$mol_rest_port_ws_node = $mol_rest_port_ws_node;
+    $.$mol_rest_port_ws = $mol_rest_port_ws_node;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
     class $hyoo_crus_yard extends $mol_object {
         realm() {
             return null;
@@ -14222,7 +14459,61 @@ var $;
             return ($mol_wire_probe(() => this.reconnects()) ?? 0) + 1;
         }
         master() {
-            return null;
+            this.reconnects();
+            const link = this.master_current();
+            if (!link)
+                return null;
+            const socket = new $mol_dom_context.WebSocket(link.replace(/^http/, 'ws'));
+            socket.binaryType = 'arraybuffer';
+            const port = $mol_rest_port_ws_std.make({ socket });
+            socket.onmessage = async (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    if (!event.data.byteLength)
+                        return;
+                    await $mol_wire_async(this).port_income(port, new Uint8Array(event.data));
+                }
+                else {
+                    this.$.$mol_log3_fail({
+                        place: this,
+                        message: 'Wrong data',
+                        data: event.data
+                    });
+                }
+            };
+            let interval;
+            socket.onclose = () => {
+                clearInterval(interval);
+                setTimeout(() => this.reconnects(null), 1000);
+            };
+            Object.assign(socket, {
+                destructor: () => {
+                    socket.onclose = () => { };
+                    clearInterval(interval);
+                    socket.close();
+                }
+            });
+            return new Promise((done, fail) => {
+                socket.onopen = () => {
+                    this.$.$mol_log3_come({
+                        place: this,
+                        message: 'Connected',
+                        port: $mol_key(port),
+                        server: link,
+                    });
+                    interval = setInterval(() => socket.send(new Uint8Array), 30000);
+                    done(port);
+                };
+                socket.onerror = () => {
+                    socket.onclose = event => {
+                        fail(new Error(`Master (${link}) is unavailable (${event.code})`));
+                        clearInterval(interval);
+                        interval = setTimeout(() => {
+                            this.master_next();
+                            this.reconnects(null);
+                        }, 1000);
+                    };
+                };
+            });
         }
         slaves = new $mol_wire_set();
         sync() {
@@ -14339,6 +14630,9 @@ var $;
     ], $hyoo_crus_yard.prototype, "reconnects", null);
     __decorate([
         $mol_mem
+    ], $hyoo_crus_yard.prototype, "master", null);
+    __decorate([
+        $mol_mem
     ], $hyoo_crus_yard.prototype, "sync", null);
     __decorate([
         $mol_mem
@@ -14447,33 +14741,66 @@ var $;
 "use strict";
 var $;
 (function ($) {
+    class $hyoo_crus_base extends $hyoo_crus_dict.with({
+        Title: $hyoo_crus_reg_str,
+        Selection: $hyoo_crus_reg_str,
+        Profiles: $hyoo_crus_dict_to($hyoo_crus_reg_ref_to(() => $hyoo_crus_dict)),
+    }) {
+        profile(app, preset) {
+            return this.Profiles?.key(app, null)?.remote_ensure(preset)?.land() ?? null;
+        }
+    }
+    $.$hyoo_crus_base = $hyoo_crus_base;
+})($ || ($ = {}));
+
+;
+"use strict";
+var $;
+(function ($) {
     class $hyoo_crus_realm extends $mol_object {
-        lords = new $mol_wire_dict();
+        lands = new $mol_wire_dict();
         yard() {
             return this.$.$hyoo_crus_yard.make({
                 realm: $mol_const(this),
             });
         }
         home() {
-            return this.Lord(this.$.$hyoo_crus_auth.current().lord());
+            return this.Land(this.$.$hyoo_crus_auth.current().lord());
         }
-        Lord(numb) {
-            let lord = this.lords.get(numb);
-            if (lord)
-                return lord;
-            lord = $hyoo_crus_lord.make({
-                realm: $mol_const(this),
-                ref: $mol_const(numb),
+        land_grab(preset = $hyoo_crus_rank_public) {
+            const knight = this.$.$hyoo_crus_auth.grab();
+            const colony = $mol_wire_sync($hyoo_crus_land).make({
+                auth: () => knight,
             });
-            this.lords.set(numb, lord);
-            return lord;
+            if (!preset.get.includes($hyoo_crus_ref(''))) {
+                colony.encrypted(true);
+            }
+            const self = this.$.$hyoo_crus_auth.current().lord();
+            for (const ref of preset.get)
+                colony.give(ref ?? self, $hyoo_crus_rank.get);
+            for (const ref of preset.add)
+                colony.give(ref ?? self, $hyoo_crus_rank.add);
+            for (const ref of preset.mod)
+                colony.give(ref ?? self, $hyoo_crus_rank.mod);
+            for (const ref of preset.law)
+                colony.give(ref ?? self, $hyoo_crus_rank.law);
+            const land = this.Land(colony.ref());
+            land.apply_unit_trust(colony.delta_unit());
+            return land;
         }
         Land(ref) {
-            const lord = this.Lord($hyoo_crus_ref_home(ref));
-            return lord.Land($hyoo_crus_ref_land(ref));
+            let land = this.lands.get(ref);
+            if (land)
+                return land;
+            land = $hyoo_crus_land.make({
+                realm: $mol_const(this),
+                ref: $mol_const(ref),
+            });
+            this.lands.set(ref, land);
+            return land;
         }
         Node(ref, Node) {
-            const land = this.Land($hyoo_crus_ref_root(ref));
+            const land = this.Land($hyoo_crus_ref_land(ref));
             return land.Node(Node).Item($hyoo_crus_ref_head(ref));
         }
         apply_pack(pack) {
@@ -14498,8 +14825,11 @@ var $;
         $mol_mem
     ], $hyoo_crus_realm.prototype, "yard", null);
     __decorate([
+        $mol_action
+    ], $hyoo_crus_realm.prototype, "land_grab", null);
+    __decorate([
         $mol_mem_key
-    ], $hyoo_crus_realm.prototype, "Lord", null);
+    ], $hyoo_crus_realm.prototype, "Land", null);
     __decorate([
         $mol_action
     ], $hyoo_crus_realm.prototype, "apply_pack", null);
@@ -14717,17 +15047,17 @@ var $;
             return ['', offset];
         }
         selection(lord, next) {
-            const base = this.realm().Lord(lord).base();
+            const base = this.realm().Land(lord).Data($hyoo_crus_base);
             if (next) {
                 base.selection(next.map(offset => this.point_by_offset(offset).join(':')).join('|'));
                 return next;
             }
             else {
                 this.text();
-                return base.selection().split('|').map(point => {
+                return base.selection()?.split('|').map(point => {
                     const chunks = point.split(':');
                     return this.offset_by_point([chunks[0], Number(chunks[1]) || 0])[1];
-                });
+                }) ?? [0, 0];
             }
         }
     }
@@ -15093,14 +15423,13 @@ var $;
                 return this.note_current()?.last_change() ?? null;
             }
             add() {
-                const land = this.realm().home().Land_new(0);
-                land.give(null, $hyoo_crus_rang.mod);
+                const land = this.realm().land_grab($hyoo_crus_rank_orgy);
                 this.$.$mol_dom_context.location.href = '#!=' + land.ref().description;
                 this.editing(true);
             }
             profile_arg() {
                 return {
-                    '': this.realm().home().Profile('$my_wiki', $my_wiki_note, null).ref().description
+                    '': this.realm().home().Profile('$my_wiki', $my_wiki_note, $hyoo_crus_rank_public).ref().description
                 };
             }
             editing(next) {
