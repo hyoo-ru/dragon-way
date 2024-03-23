@@ -262,7 +262,7 @@
     "$hyoo_crus_dict",
     "$hyoo_crus_list",
     "$hyoo_crus_node",
-    "$hyoo_crus_reg",
+    "$hyoo_crus_atom",
     "$hyoo_crus_vary_cast",
     "$mol_jsx",
     "$mol_type_partial_deep",
