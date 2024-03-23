@@ -43,7 +43,7 @@ namespace $.$$ {
 		@ $mol_mem
 		profile_arg() {
 			return {
-				'': this.realm().home().Profile( '$my_wiki', $my_wiki_note, $hyoo_crus_rank_public )!.ref().description
+				'': this.realm().home().hall_by( $my_wiki_note, $hyoo_crus_rank_public )!.ref().description
 			}
 		}
 		
