@@ -11653,7 +11653,7 @@ var $;
     })($hyoo_crus_gist_tag = $.$hyoo_crus_gist_tag || ($.$hyoo_crus_gist_tag = {}));
     class $hyoo_crus_gist extends $hyoo_crus_unit {
         _vary = undefined;
-        _open = undefined;
+        _open = null;
         hint(tip = 'null', tag = 'term') {
             this.uint8(0, ($hyoo_crus_gist_tag[tag] << 1) | ($hyoo_crus_vary_tip[tip] << 3));
         }
@@ -12637,8 +12637,11 @@ var $;
     class $hyoo_crus_list_tree extends $hyoo_crus_list($hyoo_crus_vary_cast_tree) {
     }
     $.$hyoo_crus_list_tree = $hyoo_crus_list_tree;
+    class $hyoo_crus_list_ref_base extends $hyoo_crus_list_ref {
+    }
+    $.$hyoo_crus_list_ref_base = $hyoo_crus_list_ref_base;
     function $hyoo_crus_list_ref_to(Value) {
-        class Ref extends $hyoo_crus_list_vary {
+        class Ref extends $hyoo_crus_list_ref_base {
             static Value = Value;
             static toJSON() {
                 return '$hyoo_crus_list_to(()=>' + Value() + ')';
@@ -12732,6 +12735,7 @@ var $;
             const unit = this.find(key);
             return unit ? this.land().Node(Node).Item(unit.self()) : null;
         }
+        static schema = {};
         static with(schema) {
             const Entity = class Entity extends this {
             };
@@ -12749,7 +12753,7 @@ var $;
                 });
                 $mol_wire_field(Entity.prototype, Field);
             }
-            return Entity;
+            return Object.assign(Entity, { schema: { ...this.schema, ...schema } });
         }
         ;
         [$mol_dev_format_head]() {
@@ -13042,7 +13046,7 @@ var $;
         }
         static rock(hash, next) {
             $mol_wire_solid();
-            return next;
+            return next ?? null;
         }
         static save(blob) {
             const hash = this.hash(blob);
@@ -13302,7 +13306,7 @@ var $;
             }
             else {
                 const buf = $mol_wire_sync(this.read()).get([hash]);
-                return buf ? new Uint8Array(buf) : undefined;
+                return buf ? new Uint8Array(buf) : null;
             }
         }
         static read() {
@@ -13411,8 +13415,12 @@ var $;
         $mol_mem
     ], $hyoo_crus_atom_vary.prototype, "value_vary", null);
     $.$hyoo_crus_atom_vary = $hyoo_crus_atom_vary;
+    class $hyoo_crus_atom_enum_base extends $hyoo_crus_atom_vary {
+        static options = [];
+    }
+    $.$hyoo_crus_atom_enum_base = $hyoo_crus_atom_enum_base;
     function $hyoo_crus_atom_enum(options) {
-        class Narrow extends $hyoo_crus_atom_vary {
+        class Narrow extends $hyoo_crus_atom_enum_base {
             static options = options;
             value(next) {
                 validate: if (next !== undefined) {
@@ -13493,6 +13501,27 @@ var $;
     class $hyoo_crus_atom_tree extends $hyoo_crus_atom($hyoo_crus_vary_cast_tree) {
     }
     $.$hyoo_crus_atom_tree = $hyoo_crus_atom_tree;
+    class $hyoo_crus_atom_ref_base extends $hyoo_crus_atom_ref {
+        static Value = $hyoo_crus_dict;
+        remote(next) {
+            const realm = this.realm();
+            let ref = next?.ref() ?? next;
+            ref = $hyoo_crus_vary_cast_ref(this.value_vary(ref));
+            if (!ref)
+                return null;
+            return realm.Node(ref, $hyoo_crus_dict);
+        }
+        remote_ensure(preset) {
+            return null;
+        }
+        local_ensure() {
+            return null;
+        }
+    }
+    __decorate([
+        $mol_mem
+    ], $hyoo_crus_atom_ref_base.prototype, "remote", null);
+    $.$hyoo_crus_atom_ref_base = $hyoo_crus_atom_ref_base;
     function $hyoo_crus_atom_ref_to(Value) {
         class Ref extends $hyoo_crus_atom_ref {
             static Value = Value;
@@ -13516,7 +13545,7 @@ var $;
             }
             remote(next) {
                 const realm = this.realm();
-                let ref = next?.ref();
+                let ref = next?.ref() ?? next;
                 ref = $hyoo_crus_vary_cast_ref(this.value_vary(ref));
                 if (!ref)
                     return null;
@@ -14098,7 +14127,7 @@ var $;
             unit.sign(sign);
         }
         gist_encode(gist) {
-            if (gist._open === undefined)
+            if (gist._open === null)
                 return gist;
             if (gist.nil())
                 return gist;
@@ -14129,7 +14158,7 @@ var $;
             }
             if (gist._vary !== undefined)
                 return gist._vary;
-            if (gist._open !== undefined)
+            if (gist._open !== null)
                 return gist._vary = $hyoo_crus_vary_decode({ tip: gist.tip(), bin: gist._open });
             let bin = gist.size() > 32 ? this.$.$hyoo_crus_mine.rock(gist.hash()) : gist.data();
             if (bin && !gist.nil() && this.secret()) {
