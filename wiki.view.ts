@@ -4,7 +4,7 @@ namespace $.$$ {
 		
 		@ $mol_mem_key
 		note( ref: $hyoo_crus_ref ) {
-			return this.realm().Node( ref, $my_wiki_note )
+			return this.$.$hyoo_crus_glob.Node( ref, $my_wiki_note )
 		}
 		
 		note_current() {
@@ -19,7 +19,7 @@ namespace $.$$ {
 		}
 		
 		note_body( next?: string ) {
-			return this.note_current()?.body( next ) ?? ''
+			return this.note_current()?.Body( next )?.value( next ) ?? ''
 		}
 		
 		note_body_selection( next?: readonly[ begin: number, end: number ] ) {
@@ -33,7 +33,7 @@ namespace $.$$ {
 		@ $mol_action
 		add() {
 			
-			const land = this.realm().land_grab( $hyoo_crus_rank_orgy )
+			const land = this.$.$hyoo_crus_glob.land_grab( $hyoo_crus_rank_orgy )
 			
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
 			this.editing( true )
@@ -43,7 +43,7 @@ namespace $.$$ {
 		@ $mol_mem
 		profile_arg() {
 			return {
-				'': this.realm().home().hall_by( $my_wiki_note, $hyoo_crus_rank_public )!.ref().description
+				'': this.$.$hyoo_crus_glob.home().hall_by( $my_wiki_note, $hyoo_crus_rank_public )!.ref().description
 			}
 		}
 		

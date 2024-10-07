@@ -6,7 +6,7 @@ namespace $ {
 		
 		@ $mol_mem
 		body_selection( next?: readonly[ begin: number, end: number ] ) {
-			return this.Body!.selection( this.land().auth().lord(), next )
+			return this.Body( next )?.selection( this.land().auth().lord(), next )
 		}
 
 	}
