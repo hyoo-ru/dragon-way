@@ -36,7 +36,7 @@ namespace $.$$ {
 			const land = this.$.$hyoo_crus_glob.land_grab( $hyoo_crus_rank_orgy )
 			
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
-			this.editing( true )
+			// this.editing( true )
 			
 		}
 		
@@ -45,6 +45,22 @@ namespace $.$$ {
 			return {
 				'': this.$.$hyoo_crus_glob.home().hall_by( $my_wiki_note, $hyoo_crus_rank_public )!.ref().description
 			}
+		}
+
+		write() {
+			const note = this.note_current()
+			note.Json(null)!.val( {head:[ 'aaaaaaa', 'bbbbbbbb', 'cccccccc', ]} )
+			note.Jsan(null)!.val( [ 'aaaaaaa', 'bbbbbbbb', 'cccccccc', ] )
+		}
+
+		@ $mol_mem
+		json() {
+			return JSON.stringify( this.note_current().Json()?.val() )
+		}
+
+		@ $mol_mem
+		jsan() {
+			return JSON.stringify( this.note_current().Jsan()?.val() )
 		}
 		
 		@ $mol_mem

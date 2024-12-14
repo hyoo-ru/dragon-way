@@ -2,6 +2,8 @@ namespace $ {
 	
 	export class $my_wiki_note extends $hyoo_crus_entity.with({
 		Body: $hyoo_crus_text,
+		Json: $hyoo_crus_atom_json,
+		Jsan: $hyoo_crus_atom_jsan,
 	}) {
 		
 		@ $mol_mem

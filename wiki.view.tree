@@ -27,11 +27,19 @@ $my_wiki $mol_book2
 						<= Profile_icon $mol_icon_account
 			body /
 				<= Content $mol_list rows /
+					<= Json $mol_labeler
+						content / <= json null
+					<= Jsan $mol_labeler
+						content / <= jsan null
+					<= Mass_media_name $mol_paragraph
+						title <= mass_media_title \
 					<= Body $mol_text
 						text <= note_body
 					<= Note_changed_moment $mol_date
 						value_moment <= note_changed_moment $mol_time_moment
 						enabled false
+				<= Write $mol_button_major
+					click? <=> write? null
 		<= Edit_page $mol_page
 			head /
 				<= Title $mol_string
