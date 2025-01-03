@@ -4,6 +4,10 @@ namespace $ {
 		Body: $hyoo_crus_text,
 	}) {
 		
+		body( next?: string ) {
+			return this.Body(null)?.text( next ) ?? ''
+		}
+		
 		@ $mol_mem
 		body_selection( next?: readonly[ begin: number, end: number ] ) {
 			return this.Body( next )?.selection( this.land().auth().lord(), next )

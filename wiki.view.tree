@@ -42,7 +42,7 @@ $my_wiki $mol_book2
 				<= Edit_close $mol_button_minor
 					hint \Close editor
 					click? <=> edit_close? null
-					sub / <= Edit_close_icon $mol_icon_cross
+					sub / <= Edit_close_icon $mol_icon_close
 			body /
 				<= Body_edit $mol_textarea
 					hint \Node Content
