@@ -18,12 +18,8 @@ namespace $.$$ {
 			return this.note_current()?.title( next ) ?? ''
 		}
 		
-		note_body( next?: string ) {
-			return this.note_current()?.Body( next )?.value( next ) ?? ''
-		}
-		
-		note_body_selection( next?: readonly[ begin: number, end: number ] ) {
-			return this.note_current()?.body_selection( next ) ?? [ 0, 0 ]
+		note_body() {
+			return this.note_current()?.Body( null )!
 		}
 		
 		note_changed_moment() {
@@ -50,18 +46,6 @@ namespace $.$$ {
 		@ $mol_mem
 		editing( next?: boolean ) {
 			return this.$.$mol_state_history.value( 'edit', next ) ?? false
-		}
-		
-		edit_close() {
-			this.editing( false )
-		}
-		
-		@ $mol_mem
-		pages() {
-			return [
-				this.View_page(),
-				... this.editing() ? [ this.Edit_page() ] : [],
-			]
 		}
 		
 	}
