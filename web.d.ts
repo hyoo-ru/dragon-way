@@ -5323,6 +5323,7 @@ declare namespace $ {
         static from_native(range: Range): $mol_dom_range;
         static inside(node: Node): $mol_dom_range;
         static around(node: Node): $mol_dom_range;
+        container(): Node;
         is_empty(): boolean;
         swap(): $mol_dom_range;
         expand(): $mol_dom_range;
@@ -5344,6 +5345,7 @@ declare namespace $.$$ {
     class $hyoo_crus_dom_edit extends $.$hyoo_crus_dom_edit {
         dom_id(): string;
         editable(): "true" | "false";
+        setup(): void;
         sub(): ChildNode[];
         selection(next?: readonly (readonly [string, number])[]): readonly (readonly [string, number])[];
         save(): void;
@@ -5375,6 +5377,7 @@ declare namespace $ {
 	export class $hyoo_crus_dom_edit extends $mol_view {
 		editable( ): string
 		save( next?: any ): any
+		setup( ): any
 		selection_load( ): any
 		selection_sync( ): any
 		toggle( id: any, next?: any ): any

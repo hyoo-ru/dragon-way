@@ -12421,6 +12421,9 @@ var $;
 			if(next !== undefined) return next;
 			return null;
 		}
+		setup(){
+			return null;
+		}
 		selection_load(){
 			return null;
 		}
@@ -12460,7 +12463,11 @@ var $;
 			return "";
 		}
 		auto(){
-			return [(this.selection_load()), (this.selection_sync())];
+			return [
+				(this.setup()), 
+				(this.selection_load()), 
+				(this.selection_sync())
+			];
 		}
 		plugins(){
 			return [(this.Hotkey())];
@@ -12732,6 +12739,9 @@ var $;
         static around(node) {
             return $mol_dom_range.inside(node).expand();
         }
+        container() {
+            return this.native().commonAncestorContainer;
+        }
         is_empty() {
             return this.anchor.node === this.extend.node && this.anchor.pos === this.extend.pos;
         }
@@ -12787,7 +12797,7 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    $mol_style_attach("hyoo/crus/dom/edit/edit.view.css", "[hyoo_crus_dom_edit] {\n\tflex-direction: column;\n\tborder-radius: var(--mol_gap_round);\n\tflex: 1;\n}\n\n[hyoo_crus_dom_edit][contenteditable=\"true\"] {\n\tbackground-color: var(--mol_theme_field);\n\toutline: 1px solid var(--mol_theme_line);\n}\n\n[hyoo_crus_dom_edit]:focus {\n\toutline: none;\n\tz-index: var(--mol_layer_focus);\n\tcolor: var(--mol_theme_text);\n\toutline: 1px solid var(--mol_theme_focus);\n}\n\n[hyoo_crus_dom_edit] a {\n\tcolor: var(--mol_theme_control);\n\ttext-decoration: none;\n}\n\n[hyoo_crus_dom_edit] p {\n\tmargin: 0;\n\tpadding: var(--mol_gap_text);\n}\n\n[hyoo_crus_dom_edit] img {\n\tmargin: var(--mol_gap_block);\n\tmax-width: calc( 100% - 2 * var(--mol_gap_block) );\n}\n\n[hyoo_crus_dom_edit] hr {\n\tmargin: var(--mol_gap_block);\n\tborder: none;\n\tbox-shadow: 0 -1px 0 0px var(--mol_theme_line);\n    height: 1px;\n}\n\n[hyoo_crus_dom_edit] h1,\n[hyoo_crus_dom_edit] h2 {\n\tfont-size: 1em;\n\tfont-weight: bolder;\n\tmargin: 0;\n\tpadding: var(--mol_gap_text);\n}\n");
+    $mol_style_attach("hyoo/crus/dom/edit/edit.view.css", "[hyoo_crus_dom_edit] {\n\tflex-direction: column;\n\tborder-radius: var(--mol_gap_round);\n\tflex: 1;\n\twhite-space: pre-wrap;\n}\n\n[hyoo_crus_dom_edit][contenteditable=\"true\"] {\n\tbackground-color: var(--mol_theme_field);\n\toutline: 1px solid var(--mol_theme_line);\n}\n\n[hyoo_crus_dom_edit]:focus {\n\toutline: none;\n\tz-index: var(--mol_layer_focus);\n\tcolor: var(--mol_theme_text);\n\toutline: 1px solid var(--mol_theme_focus);\n}\n\n[hyoo_crus_dom_edit] a {\n\tcolor: var(--mol_theme_control);\n\ttext-decoration: none;\n}\n\n[hyoo_crus_dom_edit] p {\n\tmargin: 0;\n\tpadding: var(--mol_gap_text);\n}\n\n[hyoo_crus_dom_edit] img {\n\tmargin: var(--mol_gap_block);\n\tmax-width: calc( 100% - 2 * var(--mol_gap_block) );\n}\n\n[hyoo_crus_dom_edit] hr {\n\tmargin: var(--mol_gap_block);\n\tborder: none;\n\tbox-shadow: 0 -1px 0 0px var(--mol_theme_line);\n    height: 1px;\n}\n\n[hyoo_crus_dom_edit] h1,\n[hyoo_crus_dom_edit] h2 {\n\tfont-size: 1em;\n\tfont-weight: bolder;\n\tmargin: 0;\n\tpadding: var(--mol_gap_text);\n}\n");
 })($ || ($ = {}));
 
 ;
@@ -12806,6 +12816,8 @@ var $;
             editable() {
                 return this.enabled() ? 'true' : 'false';
             }
+            setup() {
+            }
             sub() {
                 console.log('render');
                 let nodes = $mol_jsx_attach($mol_dom_context.document, () => this.node().dom());
@@ -12817,9 +12829,18 @@ var $;
                 return this.node().selection(this.$.$hyoo_crus_auth.current().lord(), next);
             }
             save() {
-                let nodes = [...this.dom_node().childNodes];
+                const sel = $mol_dom_range.from_selection();
+                const root = this.dom_node();
+                if (!$mol_dom_range.inside(root).range_contains(sel))
+                    return;
+                let container = sel.container();
+                while (['SPAN', '#text'].includes(container.nodeName)) {
+                    container = container.parentElement;
+                }
+                const dom = this.node().land().Node($hyoo_crus_dom).Item(container.id);
+                let nodes = [...container.childNodes];
                 nodes = this.$.$mol_dom_safe(nodes);
-                this.node().dom(nodes);
+                dom.dom(nodes);
                 this.selection_save();
             }
             selection_sync() {
@@ -12857,6 +12878,9 @@ var $;
                 event.preventDefault();
             }
         }
+        __decorate([
+            $mol_mem
+        ], $hyoo_crus_dom_edit.prototype, "setup", null);
         __decorate([
             $mol_mem
         ], $hyoo_crus_dom_edit.prototype, "sub", null);
