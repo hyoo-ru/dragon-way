@@ -18,14 +18,6 @@ namespace $ {
 			},
 		},
 		
-		Edit_page: {
-			margin: [ 0, 'auto' ],
-			flex: {
-				basis: rem(60),
-				grow: 0,
-			},
-		},
-		
 	} )
 	
 }

@@ -7,6 +7,11 @@ $my_wiki $mol_book2
 	pages /
 		<= View_page $mol_page
 			title <= note_title
+			Title <= Title $mol_string
+				hint \Title
+				value? <=> note_title? \
+				enabled <= editing
+				selection? <=> title_selection? /
 			tools /
 				<= Lights $mol_lights_toggle
 				<= Source $mol_link_source
@@ -27,25 +32,11 @@ $my_wiki $mol_book2
 						<= Profile_icon $mol_icon_account
 			body /
 				<= Content $mol_list rows /
-					<= Body $mol_text
-						text <= note_body
+					<= Body $hyoo_crus_dom_edit
+						hint \Node Content
+						node <= note_body $hyoo_crus_dom
+						enabled <= editing
 					<= Note_changed_moment $mol_date
 						value_moment <= note_changed_moment $mol_time_moment
 						enabled false
-		<= Edit_page $mol_page
-			head /
-				<= Title $mol_string
-					hint \Title
-					value? <=> note_title? \
-					enabled <= editing
-					selection? <=> title_selection? /
-				<= Edit_close $mol_button_minor
-					hint \Close editor
-					click? <=> edit_close? null
-					sub / <= Edit_close_icon $mol_icon_close
-			body /
-				<= Body_edit $mol_textarea
-					hint \Node Content
-					value? <=> note_body? \
-					enabled <= editing
-					selection? <=> note_body_selection? /number
+
