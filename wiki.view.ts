@@ -33,7 +33,7 @@ namespace $.$$ {
 		@ $mol_action
 		add() {
 			
-			const land = this.$.$hyoo_crus_glob.land_grab( { '': $hyoo_crus_rank.mod } )
+			const land = this.$.$hyoo_crus_glob.land_grab( { '': $hyoo_crus_rank_post( 'just' ) } )
 			
 			this.$.$mol_dom_context.location.href = '#!=' + land.ref().description
 			this.editing( true )
@@ -43,7 +43,7 @@ namespace $.$$ {
 		@ $mol_mem
 		profile_arg() {
 			return {
-				'': this.$.$hyoo_crus_glob.home().hall_by( $my_wiki_note, { '': $hyoo_crus_rank.get } )!.ref().description
+				'': this.$.$hyoo_crus_glob.home().hall_by( $my_wiki_note, { '': $hyoo_crus_rank_read } )!.ref().description
 			}
 		}
 		
