@@ -2472,23 +2472,6 @@ declare namespace $ {
 }
 
 declare namespace $ {
-    class $mol_wire_set<Value> extends Set<Value> {
-        pub: $mol_wire_pub;
-        has(value: Value): boolean;
-        entries(): SetIterator<[Value, Value]>;
-        keys(): SetIterator<Value>;
-        values(): SetIterator<Value>;
-        forEach(task: (value: Value, value2: Value, set: Set<Value>) => void, self?: any): void;
-        [Symbol.iterator](): SetIterator<Value>;
-        get size(): number;
-        add(value: Value): this;
-        delete(value: Value): boolean;
-        clear(): void;
-        item(val: Value, next?: boolean): boolean;
-    }
-}
-
-declare namespace $ {
     class $hyoo_crus_fund<Key, Node> extends $mol_object {
         readonly item_make: (head: Key) => Node;
         constructor(item_make: (head: Key) => Node);
@@ -2731,7 +2714,7 @@ declare namespace $ {
             $hyoo_crus_ref: symbol;
         }, $hyoo_crus_gift>;
         sand: $mol_wire_dict<string, $mol_wire_dict<string, $mol_wire_dict<string, $hyoo_crus_sand>>>;
-        self_all: $mol_wire_set<string>;
+        self_all: $mol_wire_dict<string, $hyoo_crus_sand | null>;
         self_make(idea?: number): string;
         home(): $hyoo_crus_home;
         area_make(idea?: number): $hyoo_crus_land;
@@ -2880,6 +2863,23 @@ declare namespace $ {
         send_json(data: object): void;
         send_dom(data: Element): void;
         static make<This extends typeof $mol_object>(this: This, config: Partial<InstanceType<This>>): InstanceType<This>;
+    }
+}
+
+declare namespace $ {
+    class $mol_wire_set<Value> extends Set<Value> {
+        pub: $mol_wire_pub;
+        has(value: Value): boolean;
+        entries(): SetIterator<[Value, Value]>;
+        keys(): SetIterator<Value>;
+        values(): SetIterator<Value>;
+        forEach(task: (value: Value, value2: Value, set: Set<Value>) => void, self?: any): void;
+        [Symbol.iterator](): SetIterator<Value>;
+        get size(): number;
+        add(value: Value): this;
+        delete(value: Value): boolean;
+        clear(): void;
+        item(val: Value, next?: boolean): boolean;
     }
 }
 
