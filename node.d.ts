@@ -2312,7 +2312,8 @@ declare namespace $ {
 }
 
 declare namespace $ {
-    class $mol_crypto_sacred extends $mol_buffer {
+    type BufferSource = ArrayBufferView<ArrayBuffer> | ArrayBuffer;
+    export class $mol_crypto_sacred extends $mol_buffer {
         static size: 16;
         static make(): $mol_crypto_sacred;
         static from<This extends typeof $mol_buffer>(this: This, serial: string | ArrayBufferView<ArrayBuffer>): InstanceType<This>;
@@ -2330,6 +2331,7 @@ declare namespace $ {
         close(sacred: DataView<ArrayBuffer>, salt: BufferSource): Promise<Uint8Array<ArrayBuffer>>;
         open(buf: Uint8Array<ArrayBuffer>, salt: BufferSource): Promise<Uint8Array<ArrayBuffer>>;
     }
+    export {};
 }
 
 declare namespace $ {
