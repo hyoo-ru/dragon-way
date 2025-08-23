@@ -446,6 +446,10 @@ declare namespace $ {
 }
 
 declare namespace $ {
+    function $mol_try<Result>(handler: () => Result): Result | Error;
+}
+
+declare namespace $ {
     function $mol_fail_log(error: unknown): boolean;
 }
 
@@ -750,6 +754,7 @@ declare namespace $ {
         prefix(): string;
         postfix(): string;
         static linear_gradient<Value>(value: Value): $mol_style_func<"linear-gradient", Value>;
+        static radial_gradient<Value>(value: Value): $mol_style_func<"radial-gradient", Value>;
         static calc<Value>(value: Value): $mol_style_func<"calc", Value>;
         static vary<Name extends string, Value extends string>(name: Name, defaultValue?: Value): $mol_style_func<"var", Name | (Name | Value)[]>;
         static url<Href extends string>(href: Href): $mol_style_func<"url", string>;
@@ -1399,7 +1404,7 @@ declare namespace $ {
         protected copy(to: string): void;
         protected drop(): void;
         protected read(): Uint8Array<ArrayBuffer>;
-        protected write(buffer: Uint8Array): undefined;
+        protected write(buffer: Uint8Array<ArrayBuffer>): undefined;
         protected kids(): this[];
         resolve(path: string): this;
         relate(base?: $mol_file): string;
@@ -2087,11 +2092,11 @@ declare namespace $ {
 }
 
 declare namespace $ {
-    function $mol_base64_encode(src: string | Uint8Array): string;
+    function $mol_base64_encode(src: string | Uint8Array<ArrayBuffer>): string;
 }
 
 declare namespace $ {
-    function $mol_base64_encode_node(str: string | Uint8Array): string;
+    function $mol_base64_encode_node(str: string | Uint8Array<ArrayBuffer>): string;
 }
 
 declare namespace $ {
@@ -2103,7 +2108,7 @@ declare namespace $ {
 }
 
 declare namespace $ {
-    function $mol_base64_ae_encode(buffer: Uint8Array): string;
+    function $mol_base64_ae_encode(buffer: Uint8Array<ArrayBuffer>): string;
     function $mol_base64_ae_decode(str: string): Uint8Array<ArrayBuffer>;
 }
 
@@ -2165,7 +2170,7 @@ declare namespace $ {
     function $hyoo_crus_ref_area(ref: $hyoo_crus_ref): string;
     function $hyoo_crus_ref_head(ref: $hyoo_crus_ref): string;
     function $hyoo_crus_ref_encode(ref: $hyoo_crus_ref): Uint8Array<ArrayBuffer>;
-    function $hyoo_crus_ref_decode(bin: Uint8Array): symbol & {
+    function $hyoo_crus_ref_decode(bin: Uint8Array<ArrayBuffer>): symbol & {
         $hyoo_crus_ref: symbol;
     };
     function $hyoo_crus_ref_relate(base: $hyoo_crus_ref, ref: $hyoo_crus_ref): symbol & {
@@ -2270,7 +2275,7 @@ declare namespace $ {
 }
 
 declare namespace $ {
-    function $mol_base64_url_encode(buffer: Uint8Array): string;
+    function $mol_base64_url_encode(buffer: Uint8Array<ArrayBuffer>): string;
     function $mol_base64_url_decode(str: string): Uint8Array<ArrayBuffer>;
 }
 
@@ -5990,10 +5995,6 @@ declare namespace $.$$ {
 }
 
 declare namespace $ {
-}
-
-declare namespace $ {
-    function $mol_try<Result>(handler: () => Result): Result | Error;
 }
 
 declare namespace $ {
