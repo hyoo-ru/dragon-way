@@ -252,6 +252,7 @@
     "$hyoo_crus_atom",
     "$mol_hash_string",
     "$mol_hash",
+    "$mol_hash_numbers",
     "$hyoo_crus_fund",
     "$mol_graph",
     "$mol_bus",
