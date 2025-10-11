@@ -4530,7 +4530,7 @@ var $;
 "use strict";
 var $;
 (function ($) {
-    $mol_style_attach("mol/button/typed/typed.view.css", "[mol_button_typed] {\n\talign-content: center;\n\talign-items: center;\n\tpadding: var(--mol_gap_text);\n\tborder-radius: var(--mol_gap_round);\n\tgap: var(--mol_gap_space);\n\tuser-select: none;\n\tcursor: pointer;\n}\n\n[mol_button_typed][disabled] {\n\tpointer-events: none;\n}\n\n[mol_button_typed]:hover ,\n[mol_button_typed]:focus-visible {\n\tbox-shadow: inset 0 0 0 100vmax var(--mol_theme_hover);\n}\n\n[mol_button_typed]:active {\n\tcolor: var(--mol_theme_focus);\n}\n\n[mol_button_typed]:empty::after {\n\tcontent: \"\\u00A0\";\n}\n");
+    $mol_style_attach("mol/button/typed/typed.view.css", "[mol_button_typed] {\n\talign-content: center;\n\talign-items: center;\n\tpadding: var(--mol_gap_text);\n\tborder-radius: var(--mol_gap_round);\n\tgap: var(--mol_gap_space);\n\tuser-select: none;\n\tcursor: pointer;\n\tmin-width: 2.5rem;\n\tmin-height: 2.5rem;\n}\n\n[mol_button_typed][disabled] {\n\tpointer-events: none;\n}\n\n[mol_button_typed]:hover ,\n[mol_button_typed]:focus-visible {\n\tbox-shadow: inset 0 0 0 100vmax var(--mol_theme_hover);\n}\n\n[mol_button_typed]:active {\n\tcolor: var(--mol_theme_focus);\n}\n");
 })($ || ($ = {}));
 
 ;
@@ -5902,6 +5902,7 @@ var $;
         boxSizing: 'border-box',
         position: 'relative',
         minWidth: rem(2.5),
+        minHeight: rem(2.5),
         gap: $mol_gap.space,
         border: {
             radius: $mol_gap.round,
@@ -5930,11 +5931,6 @@ var $;
                     textShadow: '0 0',
                 }
             }
-        },
-        ':empty': {
-            '::after': {
-                content: '"\u00A0"',
-            },
         },
     });
 })($ || ($ = {}));
@@ -14626,7 +14622,7 @@ var $;
                 const moment = this.value_moment();
                 if (val === undefined)
                     return moment?.toString('YYYY-MM-DD hh:mm') ?? '';
-                const moment2 = $mol_try(() => val && new $mol_time_moment(val).merge({ offset: new $mol_time_moment().offset })) || null;
+                const moment2 = val && $mol_try(() => new $mol_time_moment(val)) || null;
                 if (moment2 instanceof Error)
                     return val;
                 this.value_moment(moment2);
